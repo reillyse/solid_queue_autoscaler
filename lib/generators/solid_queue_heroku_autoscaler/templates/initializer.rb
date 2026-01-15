@@ -49,4 +49,10 @@ SolidQueueHerokuAutoscaler.configure do |config|
 
   # Optional: Custom logger
   # config.logger = Rails.logger
+
+  # Dashboard & Event Recording
+  # Record scale events to database for dashboard (requires dashboard migration)
+  config.record_events = true
+  # Also record no_change events (verbose, generates many records)
+  # config.record_all_events = false
 end

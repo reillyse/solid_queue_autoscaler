@@ -109,7 +109,7 @@ module SolidQueueHerokuAutoscaler
 
         desc 'Reset cooldown state for a worker (or all if WORKER=all). Use WORKER=name'
         task reset_cooldown: :environment do
-          worker_name = ENV['WORKER']&.to_sym
+          worker_name = ENV.fetch('WORKER', nil)&.to_sym
 
           if worker_name == :all || worker_name.nil?
             # Reset all workers
@@ -127,6 +127,36 @@ module SolidQueueHerokuAutoscaler
             SolidQueueHerokuAutoscaler::Scaler.reset_cooldowns!(worker_name)
             puts "Cooldown state reset for #{worker_name}"
           end
+        end
+
+        desc 'Show recent scale events. Use LIMIT=n and WORKER=name'
+        task events: :environment do
+          worker_name = ENV.fetch('WORKER', nil)
+          limit = (ENV['LIMIT'] || 20).to_i
+
+          events = SolidQueueHerokuAutoscaler::ScaleEvent.recent(limit: limit, worker_name: worker_name)
+
+          if events.empty?
+            puts 'No events found'
+            puts '(Make sure to run: rails generate solid_queue_heroku_autoscaler:dashboard)'
+          else
+            puts "Recent Scale Events#{" for #{worker_name}" if worker_name} (#{events.size}):"
+            puts '-' * 100
+            events.each do |event|
+              action = event.action.ljust(10)
+              workers = "#{event.from_workers}->#{event.to_workers}".ljust(8)
+              dry_run = event.dry_run ? ' [DRY RUN]' : ''
+              time = event.created_at.strftime('%Y-%m-%d %H:%M:%S')
+              puts "#{time} | #{event.worker_name.ljust(15)} | #{action} | #{workers} | #{event.reason}#{dry_run}"
+            end
+          end
+        end
+
+        desc 'Cleanup old scale events. Use KEEP_DAYS=n (default: 30)'
+        task cleanup_events: :environment do
+          keep_days = (ENV['KEEP_DAYS'] || 30).to_i
+          SolidQueueHerokuAutoscaler::ScaleEvent.cleanup!(keep_days: keep_days)
+          puts "Cleaned up events older than #{keep_days} days"
         end
 
         def print_scale_result(result, worker_name)

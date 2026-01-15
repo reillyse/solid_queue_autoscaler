@@ -41,6 +41,27 @@ rails db:migrate
 
 This creates a `solid_queue_autoscaler_state` table to store cooldown timestamps.
 
+### Dashboard Setup (Optional)
+
+For a web UI to monitor autoscaler events and status:
+
+```bash
+rails generate solid_queue_heroku_autoscaler:dashboard
+rails db:migrate
+```
+
+Then mount the dashboard in `config/routes.rb`:
+
+```ruby
+# With authentication (recommended)
+authenticate :user, ->(u) { u.admin? } do
+  mount SolidQueueHerokuAutoscaler::Dashboard::Engine => "/autoscaler"
+end
+
+# Or without authentication
+mount SolidQueueHerokuAutoscaler::Dashboard::Engine => "/autoscaler"
+```
+
 ## Quick Start
 
 ### Basic Configuration (Single Worker)
@@ -416,6 +437,64 @@ end
 ```
 
 In dry-run mode, all decisions are logged but no platform API calls are made.
+
+## Dashboard
+
+The optional dashboard provides a web UI for monitoring the autoscaler:
+
+### Features
+
+- **Overview Dashboard**: Real-time metrics, worker status, and recent events
+- **Workers View**: Detailed status for each worker type with configuration and cooldowns
+- **Events Log**: Historical record of all scaling decisions with filtering
+- **Manual Scaling**: Trigger scale operations directly from the UI
+
+### Setup
+
+1. Generate the dashboard migration:
+
+```bash
+rails generate solid_queue_heroku_autoscaler:dashboard
+rails db:migrate
+```
+
+2. Mount the engine in `config/routes.rb`:
+
+```ruby
+authenticate :user, ->(u) { u.admin? } do
+  mount SolidQueueHerokuAutoscaler::Dashboard::Engine => "/autoscaler"
+end
+```
+
+3. Visit `/autoscaler` in your browser
+
+### Event Recording
+
+By default, all scaling events are recorded to the database. Configure in your initializer:
+
+```ruby
+SolidQueueHerokuAutoscaler.configure do |config|
+  # Record scale_up, scale_down, skipped, and error events (default: true)
+  config.record_events = true
+  
+  # Also record no_change events (verbose, default: false)
+  config.record_all_events = false
+end
+```
+
+### Rake Tasks for Events
+
+```bash
+# View recent scale events
+bundle exec rake solid_queue_autoscaler:events
+
+# View events for a specific worker
+WORKER=critical_worker bundle exec rake solid_queue_autoscaler:events
+
+# Cleanup old events (default: keep 30 days)
+bundle exec rake solid_queue_autoscaler:cleanup_events
+KEEP_DAYS=7 bundle exec rake solid_queue_autoscaler:cleanup_events
+```
 
 ## Troubleshooting
 

@@ -1,0 +1,102 @@
+<h2 class="mb-3">Scale Events</h2>
+
+<!-- Filter -->
+<div class="card mb-3">
+  <div class="d-flex gap-2 align-center">
+    <span class="text-muted">Filter by worker:</span>
+    <%= link_to 'All', events_path, class: "btn btn-sm #{@worker_filter.nil? ? 'btn-primary' : 'btn-secondary'}" %>
+    <% autoscaler_status.keys.each do |name| %>
+      <%= link_to name, events_path(worker: name), class: "btn btn-sm #{@worker_filter == name.to_s ? 'btn-primary' : 'btn-secondary'}" %>
+    <% end %>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="grid grid-4 mb-3">
+  <div class="card stat-card">
+    <div class="value"><%= @stats[:total] %></div>
+    <div class="label">Total Events (24h)</div>
+  </div>
+  <div class="card stat-card success">
+    <div class="value"><%= @stats[:scale_up_count] || 0 %></div>
+    <div class="label">Scale Ups</div>
+  </div>
+  <div class="card stat-card warning">
+    <div class="value"><%= @stats[:scale_down_count] || 0 %></div>
+    <div class="label">Scale Downs</div>
+  </div>
+  <div class="card stat-card">
+    <div class="value"><%= (@stats[:avg_latency] || 0).round %>s</div>
+    <div class="label">Avg Latency</div>
+  </div>
+</div>
+
+<!-- Events Table -->
+<div class="card">
+  <% if !events_available? %>
+    <p class="text-muted">
+      Events table not found. Run:
+      <code>rails generate solid_queue_heroku_autoscaler:dashboard</code>
+    </p>
+  <% elsif @events.empty? %>
+    <p class="text-muted">No scale events recorded yet.</p>
+  <% else %>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Worker</th>
+          <th>Action</th>
+          <th>Workers</th>
+          <th>Queue Depth</th>
+          <th>Latency</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @events.each do |event| %>
+          <tr>
+            <td>
+              <div><%= event.created_at.strftime('%Y-%m-%d') %></div>
+              <div class="time-ago"><%= event.created_at.strftime('%H:%M:%S') %></div>
+            </td>
+            <td>
+              <%= link_to event.worker_name, worker_path(event.worker_name) %>
+            </td>
+            <td>
+              <% case event.action %>
+              <% when 'scale_up' %>
+                <span class="badge badge-success">↑ Scale Up</span>
+              <% when 'scale_down' %>
+                <span class="badge badge-warning">↓ Scale Down</span>
+              <% when 'no_change' %>
+                <span class="badge badge-neutral">— No Change</span>
+              <% when 'skipped' %>
+                <span class="badge badge-info">⏭ Skipped</span>
+              <% when 'error' %>
+                <span class="badge badge-danger">✕ Error</span>
+              <% end %>
+              <% if event.dry_run %>
+                <span class="badge badge-neutral">DRY</span>
+              <% end %>
+            </td>
+            <td>
+              <% if event.scaled? %>
+                <strong><%= event.from_workers %></strong> → <strong><%= event.to_workers %></strong>
+                <% delta = event.to_workers - event.from_workers %>
+                <span class="<%= delta > 0 ? 'text-success' : 'text-warning' %>">
+                  (<%= delta > 0 ? '+' : '' %><%= delta %>)
+                </span>
+              <% else %>
+                <%= event.from_workers %>
+              <% end %>
+            </td>
+            <td><%= event.queue_depth %></td>
+            <td><%= event.latency_seconds.round %>s</td>
+            <td class="text-muted" style="max-width: 300px;"><%= event.reason %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</div>

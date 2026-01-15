@@ -12,6 +12,7 @@ require_relative 'solid_queue_heroku_autoscaler/advisory_lock'
 require_relative 'solid_queue_heroku_autoscaler/metrics'
 require_relative 'solid_queue_heroku_autoscaler/decision_engine'
 require_relative 'solid_queue_heroku_autoscaler/cooldown_tracker'
+require_relative 'solid_queue_heroku_autoscaler/scale_event'
 require_relative 'solid_queue_heroku_autoscaler/scaler'
 
 module SolidQueueHerokuAutoscaler
@@ -102,5 +103,6 @@ module SolidQueueHerokuAutoscaler
 end
 
 require_relative 'solid_queue_heroku_autoscaler/railtie' if defined?(Rails::Railtie)
+require_relative 'solid_queue_heroku_autoscaler/dashboard'
 
 require_relative 'solid_queue_heroku_autoscaler/autoscale_job' if defined?(ActiveJob::Base)

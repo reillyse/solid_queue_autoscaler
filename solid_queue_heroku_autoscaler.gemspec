@@ -25,6 +25,9 @@ Gem::Specification.new do |spec|
                           LICENSE.txt
                           README.md
                         ]).reject { |f| File.directory?(f) }
+
+  # Optional: Only required for dashboard
+  # spec.add_dependency 'actionpack', '>= 7.0'
   spec.bindir = 'exe'
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ['lib']

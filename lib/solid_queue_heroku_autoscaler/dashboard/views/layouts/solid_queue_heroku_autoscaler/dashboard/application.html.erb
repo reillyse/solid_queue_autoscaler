@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Solid Queue Autoscaler</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <%= csrf_meta_tags %>
+  <style>
+    :root {
+      --bg-primary: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-card: #0f3460;
+      --text-primary: #eee;
+      --text-secondary: #aaa;
+      --accent: #e94560;
+      --success: #00d26a;
+      --warning: #ffbe0b;
+      --info: #00b4d8;
+      --border: #333;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+    .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+    header {
+      background: var(--bg-secondary);
+      padding: 15px 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 30px;
+    }
+    header .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 {
+      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    header h1 span { color: var(--accent); }
+    nav { display: flex; gap: 20px; }
+    nav a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+    nav a:hover, nav a.active {
+      color: var(--text-primary);
+      background: var(--bg-card);
+    }
+    .flash {
+      padding: 12px 20px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+    }
+    .flash.notice { background: rgba(0, 210, 106, 0.2); border: 1px solid var(--success); }
+    .flash.alert { background: rgba(233, 69, 96, 0.2); border: 1px solid var(--accent); }
+    .grid { display: grid; gap: 20px; }
+    .grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+    .card {
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--border);
+    }
+    .card h2, .card h3 {
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .stat-card {
+      text-align: center;
+      padding: 25px;
+    }
+    .stat-card .value {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: var(--accent);
+    }
+    .stat-card .label {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      margin-top: 5px;
+    }
+    .stat-card.success .value { color: var(--success); }
+    .stat-card.warning .value { color: var(--warning); }
+    .stat-card.info .value { color: var(--info); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      color: var(--text-secondary);
+      font-weight: 500;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+    }
+    tr:hover { background: rgba(255,255,255,0.02); }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    .badge-success { background: rgba(0,210,106,0.2); color: var(--success); }
+    .badge-warning { background: rgba(255,190,11,0.2); color: var(--warning); }
+    .badge-danger { background: rgba(233,69,96,0.2); color: var(--accent); }
+    .badge-info { background: rgba(0,180,216,0.2); color: var(--info); }
+    .badge-neutral { background: rgba(170,170,170,0.2); color: var(--text-secondary); }
+    .btn {
+      display: inline-block;
+      padding: 10px 20px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+    .btn-primary:hover { background: #d63654; }
+    .btn-secondary {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: var(--bg-card); }
+    .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+    .progress-bar {
+      height: 8px;
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .progress-bar .fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+    .text-muted { color: var(--text-secondary); }
+    .text-success { color: var(--success); }
+    .text-warning { color: var(--warning); }
+    .text-danger { color: var(--accent); }
+    .text-info { color: var(--info); }
+    .mb-1 { margin-bottom: 0.5rem; }
+    .mb-2 { margin-bottom: 1rem; }
+    .mb-3 { margin-bottom: 1.5rem; }
+    .mt-2 { margin-top: 1rem; }
+    .d-flex { display: flex; }
+    .justify-between { justify-content: space-between; }
+    .align-center { align-items: center; }
+    .gap-2 { gap: 1rem; }
+    .time-ago { font-size: 0.85rem; color: var(--text-secondary); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+        <span>Solid Queue</span> Autoscaler
+      </h1>
+      <nav>
+        <%= link_to 'Dashboard', main_app.respond_to?(:solid_queue_autoscaler_path) ? main_app.solid_queue_autoscaler_path : root_path, class: request.path == root_path ? 'active' : '' %>
+        <%= link_to 'Workers', workers_path, class: request.path.include?('/workers') ? 'active' : '' %>
+        <%= link_to 'Events', events_path, class: request.path.include?('/events') ? 'active' : '' %>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <% if notice %>
+      <div class="flash notice"><%= notice %></div>
+    <% end %>
+    <% if alert %>
+      <div class="flash alert"><%= alert %></div>
+    <% end %>
+
+    <%= yield %>
+  </main>
+</body>
+</html>

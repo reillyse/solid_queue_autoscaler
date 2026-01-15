@@ -45,6 +45,7 @@ Metrics/ClassLength:
   Max: 200
   Exclude:
     - 'spec/**/*'
+    - 'lib/solid_queue_heroku_autoscaler/scaler.rb' # Event recording adds lines but keeps cohesion
 
 # Relax module length
 Metrics/ModuleLength:

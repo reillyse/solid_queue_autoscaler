@@ -1,0 +1,138 @@
+<h2 class="mb-3">Dashboard Overview</h2>
+
+<!-- Stats Row -->
+<div class="grid grid-4 mb-3">
+  <div class="card stat-card info">
+    <div class="value"><%= @status.values.sum { |w| w[:current_workers] } %></div>
+    <div class="label">Total Workers</div>
+  </div>
+  <div class="card stat-card">
+    <div class="value"><%= @status.values.sum { |w| w[:metrics][:queue_depth] } %></div>
+    <div class="label">Queue Depth</div>
+  </div>
+  <div class="card stat-card success">
+    <div class="value"><%= @stats[:scale_up_count] || 0 %></div>
+    <div class="label">Scale Ups (24h)</div>
+  </div>
+  <div class="card stat-card warning">
+    <div class="value"><%= @stats[:scale_down_count] || 0 %></div>
+    <div class="label">Scale Downs (24h)</div>
+  </div>
+</div>
+
+<!-- Workers Overview -->
+<div class="grid grid-2 mb-3">
+  <% @status.each do |name, worker| %>
+    <div class="card">
+      <h3>
+        <% if worker[:enabled] %>
+          <span class="badge badge-success">Active</span>
+        <% else %>
+          <span class="badge badge-neutral">Disabled</span>
+        <% end %>
+        <%= name %>
+        <% if worker[:dry_run] %>
+          <span class="badge badge-warning">Dry Run</span>
+        <% end %>
+      </h3>
+
+      <div class="d-flex justify-between mb-2">
+        <div>
+          <strong><%= worker[:current_workers] %></strong> / <%= worker[:max_workers] %> workers
+          <div class="progress-bar" style="width: 150px;">
+            <% pct = (worker[:current_workers].to_f / worker[:max_workers] * 100).round %>
+            <div class="fill" style="width: <%= pct %>%; background: <%= pct > 80 ? 'var(--warning)' : 'var(--success)' %>;"></div>
+          </div>
+        </div>
+        <div class="text-muted">
+          Process: <strong><%= worker[:process_type] %></strong>
+        </div>
+      </div>
+
+      <div class="grid grid-3 mt-2">
+        <div>
+          <div class="text-muted">Queue Depth</div>
+          <strong class="<%= worker[:metrics][:queue_depth] > worker[:thresholds][:scale_up_queue_depth] ? 'text-danger' : '' %>">
+            <%= worker[:metrics][:queue_depth] %>
+          </strong>
+        </div>
+        <div>
+          <div class="text-muted">Latency</div>
+          <strong class="<%= worker[:metrics][:latency_seconds] > worker[:thresholds][:scale_up_latency] ? 'text-danger' : '' %>">
+            <%= worker[:metrics][:latency_seconds].round %>s
+          </strong>
+        </div>
+        <div>
+          <div class="text-muted">Jobs/min</div>
+          <strong><%= worker[:metrics][:jobs_per_minute] %></strong>
+        </div>
+      </div>
+
+      <div class="mt-2">
+        <%= link_to 'View Details', worker_path(name), class: 'btn btn-secondary btn-sm' %>
+      </div>
+    </div>
+  <% end %>
+</div>
+
+<!-- Recent Events -->
+<div class="card">
+  <div class="d-flex justify-between align-center mb-2">
+    <h3>Recent Scale Events</h3>
+    <%= link_to 'View All', events_path, class: 'btn btn-secondary btn-sm' %>
+  </div>
+
+  <% if !events_available? %>
+    <p class="text-muted">
+      Events table not found. Run:
+      <code>rails generate solid_queue_heroku_autoscaler:dashboard</code>
+    </p>
+  <% elsif @recent_events.empty? %>
+    <p class="text-muted">No scale events recorded yet.</p>
+  <% else %>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Worker</th>
+          <th>Action</th>
+          <th>Workers</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @recent_events.each do |event| %>
+          <tr>
+            <td class="time-ago"><%= event.created_at.strftime('%H:%M:%S') %></td>
+            <td><%= event.worker_name %></td>
+            <td>
+              <% case event.action %>
+              <% when 'scale_up' %>
+                <span class="badge badge-success">↑ Scale Up</span>
+              <% when 'scale_down' %>
+                <span class="badge badge-warning">↓ Scale Down</span>
+              <% when 'no_change' %>
+                <span class="badge badge-neutral">— No Change</span>
+              <% when 'skipped' %>
+                <span class="badge badge-info">⏭ Skipped</span>
+              <% when 'error' %>
+                <span class="badge badge-danger">✕ Error</span>
+              <% end %>
+              <% if event.dry_run %>
+                <span class="badge badge-neutral">DRY</span>
+              <% end %>
+            </td>
+            <td>
+              <% if event.scaled? %>
+                <%= event.from_workers %> → <%= event.to_workers %>
+              <% else %>
+                <%= event.from_workers %>
+              <% end %>
+            </td>
+            <td class="text-muted"><%= truncate(event.reason, length: 60) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% end %>
+</div>

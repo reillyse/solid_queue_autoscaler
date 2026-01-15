@@ -60,6 +60,9 @@ module SolidQueueHerokuAutoscaler
     attr_accessor :enabled, :logger
     attr_writer :lock_key
 
+    # Dashboard/event recording settings
+    attr_accessor :record_events, :record_all_events
+
     def initialize
       # Configuration name (auto-set when using named configurations)
       @name = :default
@@ -121,6 +124,10 @@ module SolidQueueHerokuAutoscaler
       @kubernetes_namespace = ENV['K8S_NAMESPACE'] || 'default'
       @kubernetes_context = ENV.fetch('K8S_CONTEXT', nil)
       @kubernetes_kubeconfig = ENV.fetch('KUBECONFIG', nil)
+
+      # Dashboard/event recording settings
+      @record_events = true # Record scale events to database
+      @record_all_events = false # Also record no_change events (verbose)
     end
 
     # Returns the lock key, auto-generating based on name if not explicitly set
@@ -184,6 +191,23 @@ module SolidQueueHerokuAutoscaler
 
     def enabled?
       enabled
+    end
+
+    def record_events?
+      record_events && connection_available?
+    end
+
+    def record_all_events?
+      record_all_events && record_events?
+    end
+
+    def connection_available?
+      return true if database_connection
+      return false unless defined?(ActiveRecord::Base)
+
+      ActiveRecord::Base.connected?
+    rescue StandardError
+      false
     end
 
     # Returns the configured adapter instance.

@@ -1,0 +1,106 @@
+<h2 class="mb-3">Workers</h2>
+
+<div class="grid grid-2">
+  <% @workers.each do |name, worker| %>
+    <div class="card">
+      <h3>
+        <% if worker[:enabled] %>
+          <span class="badge badge-success">Active</span>
+        <% else %>
+          <span class="badge badge-neutral">Disabled</span>
+        <% end %>
+        <%= name %>
+        <% if worker[:dry_run] %>
+          <span class="badge badge-warning">Dry Run</span>
+        <% end %>
+      </h3>
+
+      <!-- Worker Status -->
+      <div class="d-flex justify-between mb-2">
+        <div>
+          <strong class="text-info" style="font-size: 1.5rem;"><%= worker[:current_workers] %></strong>
+          <span class="text-muted">/ <%= worker[:max_workers] %> workers</span>
+          <div class="progress-bar" style="width: 200px;">
+            <% pct = (worker[:current_workers].to_f / worker[:max_workers] * 100).round %>
+            <div class="fill" style="width: <%= pct %>%; background: <%= pct > 80 ? 'var(--warning)' : 'var(--success)' %>;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Configuration -->
+      <div class="mb-2">
+        <div class="text-muted mb-1">Configuration</div>
+        <table style="width: auto;">
+          <tr>
+            <td class="text-muted" style="padding: 4px 12px 4px 0;">Process Type</td>
+            <td><code><%= worker[:process_type] %></code></td>
+          </tr>
+          <tr>
+            <td class="text-muted" style="padding: 4px 12px 4px 0;">Queues</td>
+            <td><code><%= Array(worker[:queues]).join(', ') %></code></td>
+          </tr>
+          <tr>
+            <td class="text-muted" style="padding: 4px 12px 4px 0;">Strategy</td>
+            <td><code><%= worker[:scaling_strategy] %></code></td>
+          </tr>
+          <tr>
+            <td class="text-muted" style="padding: 4px 12px 4px 0;">Workers Range</td>
+            <td><%= worker[:min_workers] %> - <%= worker[:max_workers] %></td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Metrics -->
+      <div class="grid grid-3 mb-2">
+        <div>
+          <div class="text-muted">Queue Depth</div>
+          <strong class="<%= worker[:metrics][:queue_depth] > worker[:thresholds][:scale_up_queue_depth] ? 'text-danger' : '' %>">
+            <%= worker[:metrics][:queue_depth] %>
+          </strong>
+          <div class="text-muted" style="font-size: 0.8rem;">
+            threshold: <%= worker[:thresholds][:scale_up_queue_depth] %>
+          </div>
+        </div>
+        <div>
+          <div class="text-muted">Latency</div>
+          <strong class="<%= worker[:metrics][:latency_seconds] > worker[:thresholds][:scale_up_latency] ? 'text-danger' : '' %>">
+            <%= worker[:metrics][:latency_seconds].round %>s
+          </strong>
+          <div class="text-muted" style="font-size: 0.8rem;">
+            threshold: <%= worker[:thresholds][:scale_up_latency] %>s
+          </div>
+        </div>
+        <div>
+          <div class="text-muted">Jobs/min</div>
+          <strong><%= worker[:metrics][:jobs_per_minute] %></strong>
+        </div>
+      </div>
+
+      <!-- Cooldowns -->
+      <div class="mb-2">
+        <div class="text-muted mb-1">Cooldowns</div>
+        <div class="d-flex gap-2">
+          <% if worker[:cooldowns][:scale_up_remaining] > 0 %>
+            <span class="badge badge-info">
+              Scale Up: <%= worker[:cooldowns][:scale_up_remaining] %>s
+            </span>
+          <% end %>
+          <% if worker[:cooldowns][:scale_down_remaining] > 0 %>
+            <span class="badge badge-warning">
+              Scale Down: <%= worker[:cooldowns][:scale_down_remaining] %>s
+            </span>
+          <% end %>
+          <% if worker[:cooldowns][:scale_up_remaining] == 0 && worker[:cooldowns][:scale_down_remaining] == 0 %>
+            <span class="text-muted">No active cooldowns</span>
+          <% end %>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="d-flex gap-2">
+        <%= link_to 'View Details', worker_path(name), class: 'btn btn-secondary btn-sm' %>
+        <%= button_to 'Scale Now', scale_worker_path(name), method: :post, class: 'btn btn-primary btn-sm', disabled: !worker[:enabled] %>
+      </div>
+    </div>
+  <% end %>
+</div>
