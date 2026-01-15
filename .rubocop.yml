@@ -1,0 +1,97 @@
+# frozen_string_literal: true
+
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 3.1
+  SuggestExtensions: false
+  Exclude:
+    - 'vendor/**/*'
+    - 'bin/**/*'
+
+# Disable documentation requirement for classes/modules
+Style/Documentation:
+  Enabled: false
+
+# Relax block length for specs, gemspec, and railtie
+Metrics/BlockLength:
+  Max: 30
+  Exclude:
+    - 'spec/**/*'
+    - '*.gemspec'
+    - 'lib/solid_queue_heroku_autoscaler/railtie.rb'
+
+# Relax method length limits
+Metrics/MethodLength:
+  Max: 35
+  Exclude:
+    - 'spec/**/*'
+
+# Relax ABC size metric for configuration classes
+Metrics/AbcSize:
+  Max: 55
+  Exclude:
+    - 'spec/**/*'
+
+# Relax cyclomatic complexity for validation methods
+Metrics/CyclomaticComplexity:
+  Max: 18
+
+# Relax perceived complexity for validation methods
+Metrics/PerceivedComplexity:
+  Max: 18
+
+# Relax class length for larger classes
+Metrics/ClassLength:
+  Max: 200
+  Exclude:
+    - 'spec/**/*'
+
+# Relax module length
+Metrics/ModuleLength:
+  Max: 200
+  Exclude:
+    - 'spec/**/*'
+
+# Allow more parameters for configuration
+Metrics/ParameterLists:
+  Max: 6
+
+# Reasonable line length
+Layout/LineLength:
+  Max: 120
+  Exclude:
+    - 'spec/**/*'
+    - '*.gemspec'
+  AllowedPatterns:
+    - '^\s*#'  # Allow long comments
+    - 'attr_accessor'  # Allow long attr_accessor lines
+
+# Prefer single quotes
+Style/StringLiterals:
+  EnforcedStyle: single_quotes
+
+# Allow multiline block chains in specs
+Style/MultilineBlockChain:
+  Exclude:
+    - 'spec/**/*'
+
+# Disable development dependencies cop for gemspec
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+# Don't require MFA for gem publishing during development
+Gemspec/RequireMFA:
+  Enabled: false
+
+# Allow frozen string literal comment to be optional
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+# Allow empty else clauses
+Style/EmptyElse:
+  EnforcedStyle: empty
+
+# Disable predicate method naming cop - validate! is a common Rails pattern
+# and lock_acquired, scale_up_cooldown_active etc. are acceptable names
+Naming/PredicateMethod:
+  Enabled: false

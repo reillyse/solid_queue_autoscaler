@@ -1,0 +1,41 @@
+===============================================================================
+
+SolidQueueHerokuAutoscaler has been installed!
+
+Next steps:
+
+1. Set environment variables:
+   - HEROKU_API_KEY: Generate with `heroku authorizations:create -d "Solid Queue Autoscaler"`
+   - HEROKU_APP_NAME: Your Heroku app name
+
+2. Run the migration generator for persistent cooldown tracking:
+
+   rails generate solid_queue_heroku_autoscaler:migration
+   rails db:migrate
+
+3. Review config/initializers/solid_queue_autoscaler.rb and adjust thresholds
+
+4. Add the recurring job to config/recurring.yml:
+
+   autoscaler:
+     class: SolidQueueHerokuAutoscaler::AutoscaleJob
+     queue: autoscaler
+     schedule: every 30 seconds
+
+5. Configure a dedicated queue in config/queue.yml:
+
+   queues:
+     - autoscaler
+     - default
+
+   workers:
+     - queues: [autoscaler]
+       threads: 1
+     - queues: [default]
+       threads: 5
+
+6. Test with dry_run mode before enabling in production
+
+For more information, see: https://github.com/reillyse/solid_queue_heroku_autoscaler
+
+===============================================================================
