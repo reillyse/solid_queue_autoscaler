@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-01-20
+
 ### Added
 
 - **Dashboard UI**: Web-based dashboard for monitoring autoscaler events and status
@@ -18,8 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Event recording configuration**: `record_events` and `record_all_events` options
 - **New rake tasks**: `events`, `cleanup_events` for managing scale event history
 - **Dashboard generator**: `rails generate solid_queue_heroku_autoscaler:dashboard`
+- **Ruby 3.4 support**: Added CI testing for Ruby 3.4
 
-## [0.1.0] - 2025-01-XX
+## [0.1.0] - 2025-01-19
 
 ### Added
 
@@ -139,4 +142,5 @@ metrics = SolidQueueHerokuAutoscaler.metrics(:default)
 SolidQueueHerokuAutoscaler.registered_workers
 ```
 
+[0.2.0]: https://github.com/reillyse/solid_queue_heroku_autoscaler/releases/tag/v0.2.0
 [0.1.0]: https://github.com/reillyse/solid_queue_heroku_autoscaler/releases/tag/v0.1.0
