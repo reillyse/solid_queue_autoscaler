@@ -3,6 +3,13 @@ name: Release
 on:
   push:
     branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force release even if version unchanged (for initial release)'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   release:
@@ -29,6 +36,13 @@ jobs:
           # Get current version
           CURRENT_VERSION=$(ruby -r ./lib/solid_queue_heroku_autoscaler/version.rb -e "puts SolidQueueHerokuAutoscaler::VERSION")
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          # Check if force release was requested
+          if [ "${{ inputs.force_release }}" == "true" ]; then
+            echo "Force release requested"
+            echo "version_changed=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           
           # Get previous version (from parent commit)
           git checkout HEAD~1 -- lib/solid_queue_heroku_autoscaler/version.rb 2>/dev/null || true
