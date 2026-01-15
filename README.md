@@ -471,3 +471,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and contribution gu
 - [GitHub Repository](https://github.com/reillyse/solid_queue_heroku_autoscaler)
 - [RubyGems](https://rubygems.org/gems/solid_queue_heroku_autoscaler)
 - [Changelog](CHANGELOG.md)
+
