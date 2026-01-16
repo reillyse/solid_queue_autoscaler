@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2025-01-16
+
+### Fixed
+- Fixed YAML syntax in README examples that caused parsing errors when users copied them
+- Changed `args: [:all]` to block array syntax `args:\n    - :all` to avoid YAML flow node parsing issues with symbols
+
 ## [1.0.3] - 2025-01-16
 
 ### Fixed

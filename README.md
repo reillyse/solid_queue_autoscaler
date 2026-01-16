@@ -273,20 +273,23 @@ autoscaler_all:
   class: SolidQueueAutoscaler::AutoscaleJob
   queue: autoscaler
   schedule: every 30 seconds
-  args: [:all]
+  args:
+    - :all
 
 # Or scale specific worker types on different schedules
 autoscaler_critical:
   class: SolidQueueAutoscaler::AutoscaleJob
   queue: autoscaler
   schedule: every 15 seconds
-  args: [:critical_worker]
+  args:
+    - :critical_worker
 
 autoscaler_default:
   class: SolidQueueAutoscaler::AutoscaleJob
   queue: autoscaler
   schedule: every 60 seconds
-  args: [:default_worker]
+  args:
+    - :default_worker
 ```
 
 ### Running via Rake Tasks
