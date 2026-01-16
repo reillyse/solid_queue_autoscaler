@@ -220,10 +220,38 @@ module SolidQueueHerokuAutoscaler
       end
     end
 
-    # Allow setting a pre-configured adapter instance
-    attr_writer :adapter
+    # Allow setting a pre-configured adapter instance or a symbol shortcut
+    # @param value [Symbol, Base, Class] :heroku, :kubernetes, an adapter instance, or adapter class
+    def adapter=(value)
+      @adapter = case value
+                 when Symbol
+                   resolve_adapter_symbol(value)
+                 when Class
+                   value.new(config: self)
+                 else
+                   value
+                 end
+    end
+
+    # Maps adapter symbols to adapter classes
+    ADAPTER_SYMBOLS = {
+      heroku: 'SolidQueueHerokuAutoscaler::Adapters::Heroku',
+      kubernetes: 'SolidQueueHerokuAutoscaler::Adapters::Kubernetes',
+      k8s: 'SolidQueueHerokuAutoscaler::Adapters::Kubernetes'
+    }.freeze
 
     private
+
+    def resolve_adapter_symbol(symbol)
+      class_name = ADAPTER_SYMBOLS[symbol]
+      unless class_name
+        raise ConfigurationError,
+              "Unknown adapter: #{symbol}. Valid options: #{ADAPTER_SYMBOLS.keys.join(', ')}"
+      end
+
+      klass = class_name.split('::').reduce(Object) { |mod, name| mod.const_get(name) }
+      klass.new(config: self)
+    end
 
     def default_logger
       if defined?(Rails) && Rails.logger

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-01-16
+
+### Fixed
+
+- **Adapter symbol support**: Fixed `config.adapter = :heroku` and `config.adapter = :kubernetes` not working correctly. The adapter setter now properly converts symbols to adapter instances.
+- Also supports `config.adapter = :k8s` as an alias for `:kubernetes`
+
 ## [0.2.0] - 2025-01-20
 
 ### Added
@@ -142,5 +149,6 @@ metrics = SolidQueueHerokuAutoscaler.metrics(:default)
 SolidQueueHerokuAutoscaler.registered_workers
 ```
 
+[0.2.1]: https://github.com/reillyse/solid_queue_heroku_autoscaler/releases/tag/v0.2.1
 [0.2.0]: https://github.com/reillyse/solid_queue_heroku_autoscaler/releases/tag/v0.2.0
 [0.1.0]: https://github.com/reillyse/solid_queue_heroku_autoscaler/releases/tag/v0.1.0
