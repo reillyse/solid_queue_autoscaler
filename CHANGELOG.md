@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2025-01-16
+
+### Fixed
+- Fixed Dashboard templates not being found (`MissingExactTemplate` error)
+- View paths are now captured at class definition time instead of inside callbacks where `__dir__` was evaluated incorrectly
+- Properly configures both engine and application view paths for reliable template resolution
+
 ## [1.0.5] - 2025-01-16
 
 ### Added

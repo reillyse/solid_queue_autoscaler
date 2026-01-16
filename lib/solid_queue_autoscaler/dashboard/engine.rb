@@ -22,13 +22,15 @@ module SolidQueueAutoscaler
       config.solid_queue_autoscaler_dashboard = ActiveSupport::OrderedOptions.new
       config.solid_queue_autoscaler_dashboard.title = 'Solid Queue Autoscaler'
 
-      # Configure view paths
-      config.paths['app/views'] = File.expand_path('views', __dir__)
+      # Capture views path at class definition time (not inside callbacks)
+      VIEWS_PATH = File.expand_path('views', __dir__).freeze
 
-      initializer 'solid_queue_autoscaler.dashboard.view_paths' do
-        ActiveSupport.on_load(:action_controller) do
-          append_view_path File.expand_path('views', __dir__)
-        end
+      # Configure view paths for the engine
+      config.paths['app/views'] << VIEWS_PATH
+
+      initializer 'solid_queue_autoscaler.dashboard.view_paths', before: :add_view_paths do |app|
+        # Add views path to the application's view paths
+        app.config.paths['app/views'] << VIEWS_PATH
       end
 
       initializer 'solid_queue_autoscaler.dashboard.integration' do
