@@ -20,6 +20,7 @@ Gem::Specification.new do |spec|
   spec.metadata['rubygems_mfa_required'] = 'true'
 
   spec.files = Dir.glob(%w[
+                          app/**/*
                           lib/**/*
                           CHANGELOG.md
                           LICENSE.txt

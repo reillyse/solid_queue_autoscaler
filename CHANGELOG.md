@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.7] - 2025-01-16
+
+### Fixed
+- **Fixed Dashboard MissingExactTemplate error** - Views now work correctly in Rails applications
+- Moved views from `lib/` to `app/views/` (standard Rails engine structure)
+- Added `prepend_view_path Engine.root.join('app', 'views')` to ApplicationController for reliable view path resolution
+- Updated gemspec to include `app/**/*` in files array
+- Fixed layout path reference to `solid_queue_autoscaler/dashboard`
+
 ## [1.0.6] - 2025-01-16
 
 ### Fixed

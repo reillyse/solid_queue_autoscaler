@@ -22,17 +22,6 @@ module SolidQueueAutoscaler
       config.solid_queue_autoscaler_dashboard = ActiveSupport::OrderedOptions.new
       config.solid_queue_autoscaler_dashboard.title = 'Solid Queue Autoscaler'
 
-      # Capture views path at class definition time (not inside callbacks)
-      VIEWS_PATH = File.expand_path('views', __dir__).freeze
-
-      # Configure view paths for the engine
-      config.paths['app/views'] << VIEWS_PATH
-
-      initializer 'solid_queue_autoscaler.dashboard.view_paths', before: :add_view_paths do |app|
-        # Add views path to the application's view paths
-        app.config.paths['app/views'] << VIEWS_PATH
-      end
-
       initializer 'solid_queue_autoscaler.dashboard.integration' do
         # Auto-integrate with Mission Control if available
         ActiveSupport.on_load(:mission_control) do
@@ -45,7 +34,10 @@ module SolidQueueAutoscaler
     class ApplicationController < ActionController::Base
       protect_from_forgery with: :exception
 
-      layout 'solid_queue_autoscaler/dashboard/application'
+      # Add the engine's view paths to this controller
+      prepend_view_path Engine.root.join('app', 'views')
+
+      layout 'solid_queue_autoscaler/dashboard'
 
       private
 
