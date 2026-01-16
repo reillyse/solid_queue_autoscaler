@@ -240,6 +240,13 @@ Scaling down triggers when **ALL** thresholds are met:
 | `scale_down_cooldown_seconds` | Integer | `nil` | Override for scale-down cooldown |
 | `persist_cooldowns` | Boolean | `true` | Save cooldowns to database |
 
+### AutoscaleJob Settings
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `job_queue` | Symbol/String | `:autoscaler` | Queue for the AutoscaleJob |
+| `job_priority` | Integer | `nil` | Priority for the AutoscaleJob (lower = higher priority) |
+
 ### Heroku-Specific
 
 | Option | Type | Default | Description |
@@ -255,6 +262,482 @@ Scaling down triggers when **ALL** thresholds are met:
 | `kubernetes_namespace` | String | `'default'` | Kubernetes namespace |
 | `kubernetes_deployment` | String | `nil` | Deployment name to scale |
 | `kubernetes_config_path` | String | `nil` | Path to kubeconfig (optional) |
+
+## Common Configuration Examples
+
+These examples show typical setups for different use cases. Copy and adapt them to your needs.
+
+### Simple Setup (Single Worker, Heroku)
+
+Ideal for small apps, side projects, or getting started:
+
+```ruby
+# config/initializers/solid_queue_autoscaler.rb
+SolidQueueAutoscaler.configure do |config|
+  config.adapter = :heroku
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'worker'
+
+  config.min_workers = 1
+  config.max_workers = 5
+
+  # Scale up when queue backs up
+  config.scale_up_queue_depth = 50
+  config.scale_up_latency_seconds = 180  # 3 minutes
+
+  # Scale down when queue is nearly empty
+  config.scale_down_queue_depth = 5
+  config.scale_down_latency_seconds = 30
+
+  # Safety: only run in production
+  config.dry_run = !Rails.env.production?
+  config.enabled = Rails.env.production?
+end
+```
+
+```yaml
+# config/recurring.yml
+autoscaler:
+  class: SolidQueueAutoscaler::AutoscaleJob
+  queue: autoscaler
+  schedule: every 30 seconds
+```
+
+---
+
+### Cost-Optimized Setup (Scale to Zero)
+
+For apps with sporadic workloads where you want to minimize costs during idle periods:
+
+```ruby
+SolidQueueAutoscaler.configure do |config|
+  config.adapter = :heroku
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'worker'
+
+  # Allow scaling to zero - no workers when idle
+  config.min_workers = 0
+  config.max_workers = 5
+
+  # Scale up immediately when any job is queued
+  config.scale_up_queue_depth = 1
+  config.scale_up_latency_seconds = 60  # 1 minute
+
+  # Scale down aggressively when empty
+  config.scale_down_queue_depth = 0
+  config.scale_down_latency_seconds = 10
+
+  # Shorter cooldowns for faster response
+  config.scale_up_cooldown_seconds = 30
+  config.scale_down_cooldown_seconds = 300  # 5 min before scaling to zero
+
+  config.enabled = Rails.env.production?
+end
+```
+
+**⚠️ Note:** With `min_workers = 0`, there's cold-start latency when the first job arrives. The autoscaler must run on a web dyno or separate process, not on the workers themselves.
+
+---
+
+### E-Commerce / SaaS (Multiple Worker Types)
+
+For apps with different job priorities (payments, notifications, reports):
+
+```ruby
+# Critical jobs - payments, webhooks, user-facing notifications
+SolidQueueAutoscaler.configure(:critical_worker) do |config|
+  config.adapter = :heroku
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'critical_worker'
+  
+  config.queues = ['critical', 'payments', 'webhooks']
+  
+  # Always have capacity, scale aggressively
+  config.min_workers = 2
+  config.max_workers = 10
+  config.scale_up_queue_depth = 5
+  config.scale_up_latency_seconds = 30
+  
+  # Short cooldowns for responsiveness
+  config.cooldown_seconds = 60
+  
+  # High-priority autoscaler job
+  config.job_queue = :autoscaler
+  config.job_priority = 0
+end
+
+# Default jobs - emails, notifications, analytics
+SolidQueueAutoscaler.configure(:default_worker) do |config|
+  config.adapter = :heroku
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'worker'
+  
+  config.queues = ['default', 'mailers', 'analytics']
+  
+  # Standard capacity, moderate scaling
+  config.min_workers = 1
+  config.max_workers = 8
+  config.scale_up_queue_depth = 100
+  config.scale_up_latency_seconds = 300
+  
+  config.cooldown_seconds = 120
+end
+
+# Batch jobs - reports, exports, data processing
+SolidQueueAutoscaler.configure(:batch_worker) do |config|
+  config.adapter = :heroku
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'batch_worker'
+  
+  config.queues = ['batch', 'reports', 'exports']
+  
+  # Scale to zero when no batch jobs, scale up for any batch work
+  config.min_workers = 0
+  config.max_workers = 3
+  config.scale_up_queue_depth = 1
+  config.scale_down_queue_depth = 0
+  
+  # Long cooldowns - batch jobs take time
+  config.cooldown_seconds = 300
+end
+```
+
+```yaml
+# config/recurring.yml
+# Scale critical workers frequently
+autoscaler_critical:
+  class: SolidQueueAutoscaler::AutoscaleJob
+  queue: autoscaler
+  schedule: every 15 seconds
+  args: [:critical_worker]
+
+# Scale default workers normally
+autoscaler_default:
+  class: SolidQueueAutoscaler::AutoscaleJob
+  queue: autoscaler
+  schedule: every 30 seconds
+  args: [:default_worker]
+
+# Scale batch workers less frequently
+autoscaler_batch:
+  class: SolidQueueAutoscaler::AutoscaleJob
+  queue: autoscaler
+  schedule: every 60 seconds
+  args: [:batch_worker]
+```
+
+---
+
+### High-Volume API (Webhook Processing)
+
+For apps processing many incoming webhooks or API callbacks:
+
+```ruby
+SolidQueueAutoscaler.configure do |config|
+  config.adapter = :heroku
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'worker'
+
+  config.queues = ['webhooks', 'callbacks', 'api_jobs']
+
+  # Maintain baseline capacity
+  config.min_workers = 2
+  config.max_workers = 20
+
+  # Proportional scaling - scale based on actual load
+  config.scaling_strategy = :proportional
+  config.scale_up_queue_depth = 50
+  config.scale_up_latency_seconds = 60
+  
+  # Add 1 worker per 25 jobs over threshold
+  config.scale_up_jobs_per_worker = 25
+  # Add 1 worker per 30 seconds over latency threshold
+  config.scale_up_latency_per_worker = 30
+  
+  # Scale down when under capacity
+  config.scale_down_queue_depth = 10
+  config.scale_down_jobs_per_worker = 50
+
+  # Fast cooldowns for responsive scaling
+  config.scale_up_cooldown_seconds = 30
+  config.scale_down_cooldown_seconds = 120
+  
+  config.job_priority = 0  # Process autoscaler jobs first
+end
+```
+
+---
+
+### Data Processing / ETL Pipeline
+
+For apps with heavy data processing, imports, or batch ETL jobs:
+
+```ruby
+SolidQueueAutoscaler.configure(:etl_worker) do |config|
+  config.adapter = :heroku
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'etl_worker'
+
+  config.queues = ['imports', 'exports', 'etl', 'data_sync']
+
+  # Scale to zero when no work, burst when needed
+  config.min_workers = 0
+  config.max_workers = 10
+
+  # Scale up as soon as work is queued
+  config.scale_up_queue_depth = 1
+  config.scale_up_latency_seconds = 120
+  
+  # Use fixed scaling for predictable behavior
+  config.scaling_strategy = :fixed
+  config.scale_up_increment = 2  # Add 2 workers at a time
+  config.scale_down_decrement = 1
+
+  # Long cooldowns - ETL jobs are long-running
+  config.scale_up_cooldown_seconds = 120
+  config.scale_down_cooldown_seconds = 600  # 10 minutes
+
+  # Scale down only when truly idle
+  config.scale_down_queue_depth = 0
+  config.scale_down_latency_seconds = 0
+end
+```
+
+---
+
+### High-Availability Setup
+
+For mission-critical apps requiring guaranteed capacity:
+
+```ruby
+SolidQueueAutoscaler.configure do |config|
+  config.adapter = :heroku
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'worker'
+
+  # Always maintain minimum capacity
+  config.min_workers = 3
+  config.max_workers = 15
+
+  # Scale up proactively before queue backs up
+  config.scale_up_queue_depth = 25
+  config.scale_up_latency_seconds = 60
+
+  # Conservative scale-down
+  config.scale_down_queue_depth = 5
+  config.scale_down_latency_seconds = 15
+
+  # Longer cooldowns to prevent flapping
+  config.cooldown_seconds = 180
+  config.scale_down_cooldown_seconds = 300  # Extra cautious on scale-down
+
+  # Record all events for monitoring
+  config.record_events = true
+  config.record_all_events = true  # Even no-change events
+end
+```
+
+---
+
+### Kubernetes Setup
+
+For apps deployed on Kubernetes:
+
+```ruby
+SolidQueueAutoscaler.configure do |config|
+  config.adapter = :kubernetes
+  config.kubernetes_namespace = ENV.fetch('K8S_NAMESPACE', 'production')
+  config.kubernetes_deployment = 'solid-queue-worker'
+  
+  # Optional: specify kubeconfig for local development
+  # config.kubernetes_kubeconfig = '~/.kube/config'
+  # config.kubernetes_context = 'my-cluster'
+
+  config.min_workers = 2  # Minimum replicas
+  config.max_workers = 20
+
+  config.scale_up_queue_depth = 100
+  config.scale_up_latency_seconds = 180
+  
+  config.scale_down_queue_depth = 10
+  config.scale_down_latency_seconds = 30
+
+  # K8s scaling can be faster than Heroku
+  config.cooldown_seconds = 60
+  
+  config.enabled = Rails.env.production?
+end
+```
+
+**Required RBAC configuration:**
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: solid-queue-autoscaler
+  namespace: production
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments", "deployments/scale"]
+  verbs: ["get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: solid-queue-autoscaler
+  namespace: production
+subjects:
+- kind: ServiceAccount
+  name: solid-queue-autoscaler
+  namespace: production
+roleRef:
+  kind: Role
+  name: solid-queue-autoscaler
+  apiGroup: rbac.authorization.k8s.io
+```
+
+---
+
+### Development / Testing Setup
+
+For local development and CI environments:
+
+```ruby
+SolidQueueAutoscaler.configure do |config|
+  config.adapter = :heroku
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'worker'
+
+  config.min_workers = 1
+  config.max_workers = 3
+
+  config.scale_up_queue_depth = 10
+  config.scale_up_latency_seconds = 60
+
+  # IMPORTANT: Disable in development, use dry_run in staging
+  case Rails.env
+  when 'production'
+    config.enabled = true
+    config.dry_run = false
+  when 'staging'
+    config.enabled = true
+    config.dry_run = true  # Log decisions but don't scale
+  else
+    config.enabled = false
+  end
+
+  # Verbose logging for debugging
+  config.logger = Logger.new(STDOUT)
+  config.logger.level = Rails.env.production? ? Logger::INFO : Logger::DEBUG
+end
+```
+
+---
+
+### Configuration Comparison
+
+| Use Case | min | max | scale_up_depth | scale_up_latency | cooldown | strategy |
+|----------|-----|-----|----------------|------------------|----------|----------|
+| Simple/Starter | 1 | 5 | 50 | 180s | 120s | fixed |
+| Cost-Optimized | 0 | 5 | 1 | 60s | 30s/300s | fixed |
+| E-Commerce Critical | 2 | 10 | 5 | 30s | 60s | fixed |
+| E-Commerce Default | 1 | 8 | 100 | 300s | 120s | fixed |
+| Webhook Processing | 2 | 20 | 50 | 60s | 30s/120s | proportional |
+| ETL/Batch | 0 | 10 | 1 | 120s | 120s/600s | fixed |
+| High-Availability | 3 | 15 | 25 | 60s | 180s/300s | fixed |
+
+## Configuring a High-Priority Queue for the Autoscaler
+
+The autoscaler job should run reliably and quickly, even when your queues are backed up. By default, the autoscaler job runs on the `:autoscaler` queue. You can configure this and set up Solid Queue to prioritize it.
+
+### Configure the Job Queue and Priority
+
+In your initializer, set the queue and priority for the autoscaler job:
+
+```ruby
+SolidQueueAutoscaler.configure do |config|
+  # Use a dedicated high-priority queue for the autoscaler
+  config.job_queue = :autoscaler  # Default value
+  
+  # Or use an existing high-priority queue
+  config.job_queue = :critical
+  
+  # Set job priority (lower = higher priority, processed first)
+  # This works with queue backends that support job-level priority like Solid Queue
+  config.job_priority = 0  # Highest priority
+  
+  # ... other config
+end
+```
+
+For multi-worker configurations, each worker type can have its own queue and priority:
+
+```ruby
+SolidQueueAutoscaler.configure(:critical_worker) do |config|
+  config.job_queue = :autoscaler_critical
+  config.job_priority = 0  # Highest priority for critical worker scaling
+  # ... other config
+end
+
+SolidQueueAutoscaler.configure(:default_worker) do |config|
+  config.job_queue = :autoscaler_default
+  config.job_priority = 10  # Lower priority for default worker scaling
+  # ... other config
+end
+```
+
+### Configure Solid Queue to Prioritize the Autoscaler
+
+In your `config/solid_queue.yml`, ensure the autoscaler queue is processed by a dedicated worker or listed first in the queue order:
+
+```yaml
+# Option 1: Dedicated dispatcher/worker for autoscaler (recommended)
+production:
+  dispatchers:
+    - polling_interval: 1
+      batch_size: 500
+      concurrency_maintenance_interval: 30
+
+  workers:
+    # Dedicated worker for autoscaler - always responsive
+    - queues: [autoscaler]
+      threads: 1
+      processes: 1
+      polling_interval: 0.5  # Check frequently
+    
+    # Main workers for business logic
+    - queues: [critical, default, mailers]
+      threads: 5
+      processes: 2
+      polling_interval: 1
+```
+
+```yaml
+# Option 2: Include autoscaler first in queue list (simpler)
+production:
+  workers:
+    - queues: [autoscaler, critical, default, mailers]
+      threads: 5
+      processes: 2
+```
+
+Solid Queue processes queues in order, so listing `autoscaler` first ensures those jobs are picked up before others.
+
+### Why This Matters
+
+- **Responsiveness**: When your queues are backed up, you want the autoscaler to scale up workers quickly
+- **Reliability**: A dedicated queue prevents autoscaler jobs from waiting behind thousands of business jobs
+- **Isolation**: Separating autoscaler jobs makes monitoring and debugging easier
 
 ## Usage
 
@@ -506,9 +989,31 @@ KEEP_DAYS=7 bundle exec rake solid_queue_autoscaler:cleanup_events
 
 Another autoscaler instance is currently running. This is expected behavior — only one instance should run at a time per worker type.
 
+**If you believe no other instance is running:**
+
+```ruby
+# Check for stale advisory locks
+ActiveRecord::Base.connection.execute(<<~SQL)
+  SELECT * FROM pg_locks WHERE locktype = 'advisory'
+SQL
+
+# Force release a stuck lock (use with caution!)
+lock_key = SolidQueueAutoscaler.config.lock_key
+lock_id = Zlib.crc32(lock_key) & 0x7FFFFFFF
+ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(#{lock_id})")
+```
+
 ### "Cooldown active"
 
 A recent scaling event triggered the cooldown. Wait for the cooldown to expire or adjust `cooldown_seconds`.
+
+```ruby
+# Check cooldown status
+bundle exec rake solid_queue_autoscaler:cooldown
+
+# Reset cooldowns (for testing only)
+SolidQueueAutoscaler::CooldownTracker.reset!
+```
 
 ### Workers not scaling
 
@@ -518,11 +1023,262 @@ A recent scaling event triggered the cooldown. Wait for the cooldown to expire o
 4. Enable dry-run to see what decisions would be made
 5. Check the logs for error messages
 
+**Debug with a manual scale attempt:**
+
+```ruby
+# Check configuration
+config = SolidQueueAutoscaler.config
+puts "Enabled: #{config.enabled?}"
+puts "Dry Run: #{config.dry_run?}"
+puts "API Key Set: #{config.heroku_api_key.present?}"
+
+# Check current metrics
+metrics = SolidQueueAutoscaler.metrics
+puts "Queue depth: #{metrics.queue_depth}"
+puts "Latency: #{metrics.oldest_job_age_seconds}s"
+
+# Try a manual scale
+result = SolidQueueAutoscaler.scale!
+puts result.decision.inspect if result.decision
+puts result.skipped_reason if result.skipped?
+puts result.error if result.error
+```
+
+### Workers not scaling down
+
+Scale-down requires **ALL** conditions to be met:
+
+```ruby
+metrics = SolidQueueAutoscaler.metrics
+config = SolidQueueAutoscaler.config
+
+puts "Queue depth: #{metrics.queue_depth} (threshold: <= #{config.scale_down_queue_depth})"
+puts "Latency: #{metrics.oldest_job_age_seconds}s (threshold: <= #{config.scale_down_latency_seconds}s)"
+puts "Claimed jobs: #{metrics.claimed_jobs}"  # Must be 0 for idle scale-down
+puts "Current workers: #{SolidQueueAutoscaler.current_workers}"
+puts "Min workers: #{config.min_workers}"  # Can't scale below this
+```
+
+### Heroku API errors
+
+**401 Unauthorized:**
+
+```bash
+# Check if API key is valid
+heroku authorizations
+
+# Create a new authorization
+heroku authorizations:create -d "Solid Queue Autoscaler"
+```
+
+**404 Not Found:**
+
+```bash
+# Verify app name
+heroku apps
+heroku apps:info -a $HEROKU_APP_NAME
+```
+
+**429 Rate Limited:**
+
+Increase cooldown to reduce API calls:
+
+```ruby
+config.cooldown_seconds = 180  # 3 minutes instead of default 2
+```
+
 ### Kubernetes authentication issues
 
 1. Ensure the service account has permissions to patch deployments
 2. Check namespace is correct
 3. Verify deployment name matches exactly
+
+**Check RBAC permissions:**
+
+```yaml
+# Required RBAC rules for the autoscaler service account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: solid-queue-autoscaler
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments", "deployments/scale"]
+  verbs: ["get", "patch", "update"]
+```
+
+### AutoscaleJob not running
+
+**Check recurring.yml configuration:**
+
+```yaml
+# config/recurring.yml
+autoscaler:
+  class: SolidQueueAutoscaler::AutoscaleJob
+  queue: autoscaler
+  schedule: every 30 seconds
+```
+
+**Ensure a worker processes the autoscaler queue:**
+
+```yaml
+# config/solid_queue.yml
+workers:
+  - queues: [autoscaler]  # Must include autoscaler queue
+    threads: 1
+```
+
+**Test manual enqueue:**
+
+```ruby
+SolidQueueAutoscaler::AutoscaleJob.perform_later
+```
+
+### Multi-worker configuration issues
+
+**"Unknown worker: :my_worker":**
+
+Ensure you've configured the worker before referencing it:
+
+```ruby
+# Configure the worker first
+SolidQueueAutoscaler.configure(:my_worker) do |config|
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'my_worker'
+end
+
+# Then reference it
+SolidQueueAutoscaler.scale!(:my_worker)
+```
+
+**List all registered workers:**
+
+```ruby
+SolidQueueAutoscaler.registered_workers
+# => [:default, :critical_worker, :batch_worker]
+```
+
+### Database/Migration issues
+
+**"relation 'solid_queue_autoscaler_state' does not exist":**
+
+```bash
+rails generate solid_queue_autoscaler:migration
+rails db:migrate
+```
+
+**"relation 'solid_queue_ready_executions' does not exist":**
+
+Solid Queue tables are missing. Run Solid Queue migrations:
+
+```bash
+rails solid_queue:install:migrations
+rails db:migrate
+```
+
+**Multi-database setup (Solid Queue on separate database):**
+
+The autoscaler automatically detects `SolidQueue::Record.connection`. If auto-detection fails:
+
+```ruby
+SolidQueueAutoscaler.configure do |config|
+  config.database_connection = SolidQueue::Record.connection
+end
+```
+
+### Dashboard not loading
+
+**404 when visiting /autoscaler:**
+
+Ensure the engine is mounted in `config/routes.rb`:
+
+```ruby
+mount SolidQueueAutoscaler::Dashboard::Engine => "/autoscaler"
+```
+
+**"ActionView::MissingTemplate" errors:**
+
+Run the dashboard generator:
+
+```bash
+rails generate solid_queue_autoscaler:dashboard
+rails db:migrate
+```
+
+### Wrong process type being scaled
+
+```ruby
+# Check what process type is configured
+puts SolidQueueAutoscaler.config.process_type
+
+# Verify it matches your Procfile
+# Procfile:
+# web: bundle exec puma -C config/puma.rb
+# worker: bundle exec rake solid_queue:start  # <- This is "worker"
+```
+
+### Scaling too aggressively or too slowly
+
+**Scaling up too often (flapping):**
+
+```ruby
+config.cooldown_seconds = 180           # Increase cooldown
+config.scale_up_cooldown_seconds = 120  # Or set scale-up specific cooldown
+config.scale_up_queue_depth = 200       # Increase threshold
+```
+
+**Not scaling up fast enough:**
+
+```ruby
+config.scale_up_queue_depth = 50        # Lower threshold
+config.scale_up_latency_seconds = 120   # Trigger on 2 min latency
+config.cooldown_seconds = 60            # Reduce cooldown
+config.scaling_strategy = :proportional # Scale based on load, not fixed increment
+config.scale_up_jobs_per_worker = 25    # More workers per jobs over threshold
+```
+
+**Not scaling down:**
+
+```ruby
+config.scale_down_queue_depth = 5       # More aggressive scale-down threshold  
+config.scale_down_latency_seconds = 10  # Tighter latency requirement
+config.min_workers = 0                  # Allow scaling to zero (if appropriate)
+```
+
+### Debugging tips
+
+**Enable debug logging:**
+
+```ruby
+SolidQueueAutoscaler.configure do |config|
+  config.logger = Logger.new(STDOUT)
+  config.logger.level = Logger::DEBUG
+end
+```
+
+**Simulate a scaling decision without making changes:**
+
+```ruby
+metrics = SolidQueueAutoscaler.metrics
+workers = SolidQueueAutoscaler.current_workers
+engine = SolidQueueAutoscaler::DecisionEngine.new(config: SolidQueueAutoscaler.config)
+decision = engine.decide(metrics: metrics, current_workers: workers)
+
+puts "Action: #{decision.action}"    # :scale_up, :scale_down, or :no_change
+puts "From: #{decision.from} -> To: #{decision.to}"
+puts "Reason: #{decision.reason}"
+```
+
+**Run diagnostics:**
+
+```bash
+bundle exec rake solid_queue_autoscaler:metrics
+bundle exec rake solid_queue_autoscaler:formation
+bundle exec rake solid_queue_autoscaler:cooldown
+```
+
+For more detailed troubleshooting, see [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Architecture Notes
 

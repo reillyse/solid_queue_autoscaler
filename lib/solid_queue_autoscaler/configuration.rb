@@ -63,6 +63,9 @@ module SolidQueueAutoscaler
     # Dashboard/event recording settings
     attr_accessor :record_events, :record_all_events
 
+    # AutoscaleJob settings
+    attr_accessor :job_queue, :job_priority
+
     def initialize
       # Configuration name (auto-set when using named configurations)
       @name = :default
@@ -128,6 +131,10 @@ module SolidQueueAutoscaler
       # Dashboard/event recording settings
       @record_events = true # Record scale events to database
       @record_all_events = false # Also record no_change events (verbose)
+
+      # AutoscaleJob settings
+      @job_queue = :autoscaler # Queue name for the autoscaler job
+      @job_priority = nil # Job priority (lower = higher priority, nil = default)
     end
 
     # Returns the lock key, auto-generating based on name if not explicitly set

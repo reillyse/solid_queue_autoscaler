@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.8] - 2025-01-17
+
+### Added
+- **`job_queue` configuration option** - Configure which queue the AutoscaleJob runs on (default: `:autoscaler`)
+- **`job_priority` configuration option** - Set job priority for AutoscaleJob (lower = higher priority)
+- **Multi-database migration support** - Migration templates now automatically create tables in the same database as Solid Queue
+- **Common Configuration Examples** - New README section with 8 copy-paste ready configurations for different use cases:
+  - Simple/Starter setup
+  - Cost-Optimized (scale to zero)
+  - E-Commerce/SaaS (multiple worker types)
+  - High-Volume API (webhook processing with proportional scaling)
+  - Data Processing/ETL
+  - High-Availability
+  - Kubernetes
+  - Development/Testing
+- **Expanded Troubleshooting** - 15+ new troubleshooting topics with code examples
+- **Configuration Comparison Table** - Quick reference for common configurations
+
+### Changed
+- AutoscaleJob now uses `queue_as` and `queue_with_priority` blocks for dynamic queue/priority selection
+- Each worker configuration can have its own `job_queue` and `job_priority` settings
+
 ## [1.0.7] - 2025-01-16
 
 ### Fixed

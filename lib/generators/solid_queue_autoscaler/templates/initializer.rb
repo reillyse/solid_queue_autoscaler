@@ -55,4 +55,10 @@ SolidQueueAutoscaler.configure do |config|
   config.record_events = true
   # Also record no_change events (verbose, generates many records)
   # config.record_all_events = false
+
+  # AutoscaleJob Settings
+  # Queue for the autoscaler job (use a fast/high-priority Solid Queue queue)
+  config.job_queue = :autoscaler
+  # Priority for the autoscaler job (lower = higher priority, nil = default)
+  # config.job_priority = 0  # Uncomment to set highest priority
 end
