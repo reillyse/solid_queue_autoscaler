@@ -1,6 +1,6 @@
 {
-  "project": "solid_queue_heroku_autoscaler",
-  "description": "Ruby gem for auto-scaling Solid Queue workers on Heroku",
+  "project": "solid_queue_autoscaler",
+  "description": "Ruby gem for auto-scaling Solid Queue workers on multiple platforms (Heroku, Kubernetes, custom)",
   "language": "ruby",
   "framework": "rails",
   "testCommand": "bundle exec rspec",

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2025-01-16
+
+### Fixed
+- Fixed remaining old gem name references in generator templates and codebuff.json
+- Renamed spec file from `solid_queue_heroku_autoscaler_spec.rb` to `solid_queue_autoscaler_spec.rb`
+
 ## [1.0.2] - 2025-01-16
 
 ### Fixed
