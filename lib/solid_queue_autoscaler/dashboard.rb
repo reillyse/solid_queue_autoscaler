@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'dashboard/engine' if defined?(Rails::Engine)
-
 module SolidQueueAutoscaler
   # Dashboard module provides a web UI for monitoring the autoscaler.
   # Integrates with Mission Control Solid Queue when available.

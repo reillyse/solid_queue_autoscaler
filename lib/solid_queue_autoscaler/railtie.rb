@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+# Load the dashboard engine when Rails is available
+require_relative 'dashboard/engine'
+
 module SolidQueueAutoscaler
   class Railtie < Rails::Railtie
     initializer 'solid_queue_autoscaler.configure' do
