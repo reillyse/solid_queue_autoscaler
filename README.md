@@ -193,6 +193,7 @@ The Kubernetes adapter uses the official `kubeclient` gem and supports:
 | `dry_run` | Boolean | `false` | Log decisions without making changes |
 | `queues` | Array | `nil` | Queue names to monitor (nil = all queues) |
 | `table_prefix` | String | `'solid_queue_'` | Solid Queue table name prefix |
+| `database_connection` | Connection | auto | Database connection (auto-detects `SolidQueue::Record.connection`) |
 
 ### Worker Limits
 

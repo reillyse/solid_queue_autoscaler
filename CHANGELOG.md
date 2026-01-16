@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5] - 2025-01-16
+
+### Added
+- Auto-detect `SolidQueue::Record.connection` for multi-database setups
+- No longer need to manually configure `database_connection` when using Solid Queue's separate database
+- Connection priority: 1) explicit `database_connection`, 2) `SolidQueue::Record.connection`, 3) `ActiveRecord::Base.connection`
+
 ## [1.0.4] - 2025-01-16
 
 ### Fixed

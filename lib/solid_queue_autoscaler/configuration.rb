@@ -110,7 +110,7 @@ module SolidQueueAutoscaler
       # Queue filtering (nil = all queues)
       @queues = nil
 
-      # Database connection (defaults to ActiveRecord::Base.connection)
+      # Database connection (auto-detects SolidQueue::Record.connection if available)
       @database_connection = nil
 
       # Solid Queue table prefix (default: 'solid_queue_')
@@ -181,8 +181,20 @@ module SolidQueueAutoscaler
       scale_down_cooldown_seconds || cooldown_seconds
     end
 
+    # Returns the database connection for querying Solid Queue tables.
+    # Priority order:
+    # 1. Explicitly configured database_connection
+    # 2. SolidQueue::Record.connection (for multi-database setups)
+    # 3. ActiveRecord::Base.connection (fallback)
     def connection
-      database_connection || ActiveRecord::Base.connection
+      return database_connection if database_connection
+
+      # Auto-detect Solid Queue's connection for multi-database setups
+      if defined?(SolidQueue::Record) && SolidQueue::Record.respond_to?(:connection)
+        return SolidQueue::Record.connection
+      end
+
+      ActiveRecord::Base.connection
     end
 
     def dry_run?
@@ -203,6 +215,12 @@ module SolidQueueAutoscaler
 
     def connection_available?
       return true if database_connection
+
+      # Check Solid Queue connection first (for multi-database setups)
+      if defined?(SolidQueue::Record) && SolidQueue::Record.respond_to?(:connected?)
+        return SolidQueue::Record.connected?
+      end
+
       return false unless defined?(ActiveRecord::Base)
 
       ActiveRecord::Base.connected?
