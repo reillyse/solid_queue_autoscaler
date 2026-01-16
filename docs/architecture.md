@@ -11,7 +11,7 @@ Solid Queue Heroku Autoscaler is a **control plane** for Solid Queue workers on 
 │                    Your Rails Application                    │
 │                                                              │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │  SolidQueueHerokuAutoscaler                          │    │
+│  │  SolidQueueAutoscaler                          │    │
 │  │                                                      │    │
 │  │  ┌──────────────────────────────────────────────┐   │    │
 │  │  │  Scaler (Orchestrator)                        │   │    │
@@ -320,8 +320,8 @@ config.scale_up_cooldown_seconds = 30  # Shorter cooldown
 
 ```
 lib/
-├── solid_queue_heroku_autoscaler.rb        # Entry point, module API
-└── solid_queue_heroku_autoscaler/
+├── solid_queue_autoscaler.rb        # Entry point, module API
+└── solid_queue_autoscaler/
     ├── version.rb                           # VERSION constant
     ├── errors.rb                            # Error classes
     ├── adapters.rb                          # Adapters module loader
@@ -341,7 +341,7 @@ lib/
 **Dependency Graph:**
 
 ```
-SolidQueueHerokuAutoscaler (module)
+SolidQueueAutoscaler (module)
     └── Scaler
         ├── AdvisoryLock
         │   └── Configuration
@@ -354,7 +354,7 @@ SolidQueueHerokuAutoscaler (module)
                 └── Configuration
 
 AutoscaleJob
-    └── SolidQueueHerokuAutoscaler (module)
+    └── SolidQueueAutoscaler (module)
 ```
 
 ## Extension Points
@@ -364,7 +364,7 @@ AutoscaleJob
 The adapter system allows you to support different infrastructure platforms:
 
 ```ruby
-class MyPlatformAdapter < SolidQueueHerokuAutoscaler::Adapters::Base
+class MyPlatformAdapter < SolidQueueAutoscaler::Adapters::Base
   def current_workers
     # Return current worker count
   end
@@ -385,7 +385,7 @@ class MyPlatformAdapter < SolidQueueHerokuAutoscaler::Adapters::Base
 end
 
 # Use the adapter
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.adapter_class = MyPlatformAdapter
 end
 ```
@@ -397,7 +397,7 @@ See the [Adapters Guide](adapters.md) for detailed instructions.
 Override the Metrics class to add custom metrics:
 
 ```ruby
-class CustomMetrics < SolidQueueHerokuAutoscaler::Metrics
+class CustomMetrics < SolidQueueAutoscaler::Metrics
   def collect
     result = super
     result.tap do |r|
@@ -407,7 +407,7 @@ class CustomMetrics < SolidQueueHerokuAutoscaler::Metrics
 end
 
 # Use custom metrics
-scaler = SolidQueueHerokuAutoscaler::Scaler.new(
+scaler = SolidQueueAutoscaler::Scaler.new(
   metrics_collector: CustomMetrics.new
 )
 ```
@@ -417,7 +417,7 @@ scaler = SolidQueueHerokuAutoscaler::Scaler.new(
 Create a custom decision engine:
 
 ```ruby
-class CustomDecisionEngine < SolidQueueHerokuAutoscaler::DecisionEngine
+class CustomDecisionEngine < SolidQueueAutoscaler::DecisionEngine
   def decide(metrics:, current_workers:)
     # Custom logic here
     Decision.new(
@@ -436,17 +436,17 @@ Scale different process types:
 
 ```ruby
 # Scale web dynos
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.process_type = 'web'
   # ...
 end
 
 # Or create multiple autoscalers
-worker_scaler = SolidQueueHerokuAutoscaler::Scaler.new(
+worker_scaler = SolidQueueAutoscaler::Scaler.new(
   config: worker_config
 )
 
-critical_scaler = SolidQueueHerokuAutoscaler::Scaler.new(
+critical_scaler = SolidQueueAutoscaler::Scaler.new(
   config: critical_worker_config
 )
 ```

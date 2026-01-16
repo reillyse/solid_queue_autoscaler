@@ -3,8 +3,8 @@
 require 'simplecov'
 SimpleCov.start do
   add_filter '/spec/'
-  add_group 'Adapters', 'lib/solid_queue_heroku_autoscaler/adapters'
-  add_group 'Core', 'lib/solid_queue_heroku_autoscaler'
+  add_group 'Adapters', 'lib/solid_queue_autoscaler/adapters'
+  add_group 'Core', 'lib/solid_queue_autoscaler'
 
   # Set minimum coverage threshold (optional - uncomment to enforce)
   # minimum_coverage 90
@@ -13,7 +13,7 @@ SimpleCov.start do
 end
 
 require 'bundler/setup'
-require 'solid_queue_heroku_autoscaler'
+require 'solid_queue_autoscaler'
 require 'webmock/rspec'
 
 # Disable all external HTTP connections by default
@@ -39,14 +39,14 @@ RSpec.configure do |config|
   Kernel.srand config.seed
 
   config.before(:each) do
-    SolidQueueHerokuAutoscaler.reset_configuration!
-    SolidQueueHerokuAutoscaler::Scaler.reset_cooldowns!
+    SolidQueueAutoscaler.reset_configuration!
+    SolidQueueAutoscaler::Scaler.reset_cooldowns!
   end
 end
 
 # Test helper to configure with valid defaults
 def configure_autoscaler(overrides = {})
-  SolidQueueHerokuAutoscaler.configure do |config|
+  SolidQueueAutoscaler.configure do |config|
     config.heroku_api_key = overrides[:heroku_api_key] || 'test-api-key'
     config.heroku_app_name = overrides[:heroku_app_name] || 'test-app'
     config.process_type = overrides[:process_type] || 'worker'
@@ -63,8 +63,8 @@ end
 
 # Test helper to configure with Kubernetes adapter
 def configure_kubernetes_autoscaler(overrides = {})
-  SolidQueueHerokuAutoscaler.configure do |config|
-    config.adapter_class = SolidQueueHerokuAutoscaler::Adapters::Kubernetes
+  SolidQueueAutoscaler.configure do |config|
+    config.adapter_class = SolidQueueAutoscaler::Adapters::Kubernetes
     config.kubernetes_deployment = overrides[:kubernetes_deployment] || 'test-worker'
     config.kubernetes_namespace = overrides[:kubernetes_namespace] || 'default'
     config.kubernetes_context = overrides[:kubernetes_context] || 'test-context'

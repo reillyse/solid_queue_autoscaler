@@ -3,12 +3,12 @@
 ## Error Hierarchy
 
 ```ruby
-SolidQueueHerokuAutoscaler::Error (StandardError)
-├── SolidQueueHerokuAutoscaler::ConfigurationError
-├── SolidQueueHerokuAutoscaler::HerokuAPIError
-├── SolidQueueHerokuAutoscaler::MetricsError
-├── SolidQueueHerokuAutoscaler::LockError
-└── SolidQueueHerokuAutoscaler::CooldownActiveError
+SolidQueueAutoscaler::Error (StandardError)
+├── SolidQueueAutoscaler::ConfigurationError
+├── SolidQueueAutoscaler::HerokuAPIError
+├── SolidQueueAutoscaler::MetricsError
+├── SolidQueueAutoscaler::LockError
+└── SolidQueueAutoscaler::CooldownActiveError
 ```
 
 ## Error Types
@@ -20,13 +20,13 @@ SolidQueueHerokuAutoscaler::Error (StandardError)
 **Examples:**
 ```ruby
 # Missing required settings
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.heroku_api_key = nil
 end
 # => ConfigurationError: heroku_api_key is required
 
 # Invalid settings
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.heroku_api_key = 'key'
   config.heroku_app_name = 'app'
   config.min_workers = 10
@@ -38,10 +38,10 @@ end
 **How to handle:**
 ```ruby
 begin
-  SolidQueueHerokuAutoscaler.configure do |config|
+  SolidQueueAutoscaler.configure do |config|
     # ...
   end
-rescue SolidQueueHerokuAutoscaler::ConfigurationError => e
+rescue SolidQueueAutoscaler::ConfigurationError => e
   Rails.logger.error "Autoscaler configuration invalid: #{e.message}"
   # Decide whether to:
   # 1. Fall back to defaults
@@ -85,8 +85,8 @@ client.scale(5)
 **How to handle:**
 ```ruby
 begin
-  SolidQueueHerokuAutoscaler.scale!
-rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+  SolidQueueAutoscaler.scale!
+rescue SolidQueueAutoscaler::HerokuAPIError => e
   case e.status_code
   when 401
     Rails.logger.error "Invalid Heroku API key - check HEROKU_API_KEY"
@@ -127,8 +127,8 @@ metrics.queue_depth
 **How to handle:**
 ```ruby
 begin
-  metrics = SolidQueueHerokuAutoscaler.metrics
-rescue SolidQueueHerokuAutoscaler::MetricsError => e
+  metrics = SolidQueueAutoscaler.metrics
+rescue SolidQueueAutoscaler::MetricsError => e
   Rails.logger.error "Failed to collect queue metrics: #{e.message}"
   # Metrics errors are usually transient (DB connection issues)
   # or indicate missing Solid Queue setup
@@ -155,14 +155,14 @@ lock.try_lock
 **How to handle:**
 ```ruby
 begin
-  result = SolidQueueHerokuAutoscaler.scale!
-rescue SolidQueueHerokuAutoscaler::LockError => e
+  result = SolidQueueAutoscaler.scale!
+rescue SolidQueueAutoscaler::LockError => e
   # This is expected when another autoscaler is running
   Rails.logger.debug "Another autoscaler instance is running: #{e.message}"
 end
 
 # Or use non-blocking approach (returns skipped result instead of raising)
-result = SolidQueueHerokuAutoscaler.scale!
+result = SolidQueueAutoscaler.scale!
 if result.skipped? && result.skipped_reason.include?('advisory lock')
   Rails.logger.debug "Another instance is handling scaling"
 end
@@ -188,7 +188,7 @@ raise CooldownActiveError.new(45.3)
 
 ```ruby
 # Access cooldown info from result
-result = SolidQueueHerokuAutoscaler.scale!
+result = SolidQueueAutoscaler.scale!
 if result.skipped? && result.skipped_reason.include?('Cooldown')
   # Extract remaining time from message
   remaining = result.skipped_reason.match(/\((\d+)s remaining\)/)[1].to_i
@@ -210,7 +210,7 @@ class AutoscalerService
     retry_count = 0
 
     begin
-      result = SolidQueueHerokuAutoscaler.scale!
+      result = SolidQueueAutoscaler.scale!
       
       if result.success?
         log_success(result)
@@ -220,13 +220,13 @@ class AutoscalerService
       
       result
 
-    rescue SolidQueueHerokuAutoscaler::ConfigurationError => e
+    rescue SolidQueueAutoscaler::ConfigurationError => e
       # Fatal - don't retry
       log_error("Configuration error", e)
       notify_ops_team(e)
       raise
 
-    rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+    rescue SolidQueueAutoscaler::HerokuAPIError => e
       # Retry on server errors, fail fast on client errors
       if retryable_status?(e.status_code) && retry_count < MAX_RETRIES
         retry_count += 1
@@ -239,7 +239,7 @@ class AutoscalerService
         raise unless ignorable_status?(e.status_code)
       end
 
-    rescue SolidQueueHerokuAutoscaler::MetricsError => e
+    rescue SolidQueueAutoscaler::MetricsError => e
       # Retry on connection issues
       if retry_count < MAX_RETRIES
         retry_count += 1
@@ -250,7 +250,7 @@ class AutoscalerService
         raise
       end
 
-    rescue SolidQueueHerokuAutoscaler::LockError => e
+    rescue SolidQueueAutoscaler::LockError => e
       # Normal - another instance is running
       log_debug("Lock not acquired", e)
       nil
@@ -313,23 +313,23 @@ class AutoscaleJob < ApplicationJob
   queue_as :autoscaler
   
   # Don't retry configuration errors
-  discard_on SolidQueueHerokuAutoscaler::ConfigurationError
+  discard_on SolidQueueAutoscaler::ConfigurationError
   
   # Retry API errors with exponential backoff
-  retry_on SolidQueueHerokuAutoscaler::HerokuAPIError,
+  retry_on SolidQueueAutoscaler::HerokuAPIError,
            wait: :exponentially_longer,
            attempts: 3
 
   # Retry metrics errors briefly
-  retry_on SolidQueueHerokuAutoscaler::MetricsError,
+  retry_on SolidQueueAutoscaler::MetricsError,
            wait: 5.seconds,
            attempts: 2
 
   # Don't retry lock errors (normal operation)
-  discard_on SolidQueueHerokuAutoscaler::LockError
+  discard_on SolidQueueAutoscaler::LockError
 
   def perform
-    result = SolidQueueHerokuAutoscaler.scale!
+    result = SolidQueueAutoscaler.scale!
     
     unless result.success?
       raise result.error if result.error
@@ -343,14 +343,14 @@ end
 ```ruby
 # With Sentry
 begin
-  SolidQueueHerokuAutoscaler.scale!
-rescue SolidQueueHerokuAutoscaler::Error => e
+  SolidQueueAutoscaler.scale!
+rescue SolidQueueAutoscaler::Error => e
   Sentry.capture_exception(e, extra: {
-    metrics: SolidQueueHerokuAutoscaler.metrics.to_h,
+    metrics: SolidQueueAutoscaler.metrics.to_h,
     config: {
-      min_workers: SolidQueueHerokuAutoscaler.config.min_workers,
-      max_workers: SolidQueueHerokuAutoscaler.config.max_workers,
-      enabled: SolidQueueHerokuAutoscaler.config.enabled?
+      min_workers: SolidQueueAutoscaler.config.min_workers,
+      max_workers: SolidQueueAutoscaler.config.max_workers,
+      enabled: SolidQueueAutoscaler.config.enabled?
     }
   })
   raise
@@ -368,13 +368,13 @@ class AutoscalerMetrics
     StatsD.increment('autoscaler.skipped') if result.skipped?
     
     result
-  rescue SolidQueueHerokuAutoscaler::Error => e
+  rescue SolidQueueAutoscaler::Error => e
     StatsD.increment('autoscaler.error', tags: ["type:#{e.class.name.demodulize}"])
     raise
   end
 end
 
-AutoscalerMetrics.track { SolidQueueHerokuAutoscaler.scale! }
+AutoscalerMetrics.track { SolidQueueAutoscaler.scale! }
 ```
 
 ---
@@ -386,12 +386,12 @@ RSpec.describe 'Error handling' do
   describe 'ConfigurationError' do
     it 'raises on missing API key' do
       expect {
-        SolidQueueHerokuAutoscaler.configure do |config|
+        SolidQueueAutoscaler.configure do |config|
           config.heroku_api_key = nil
           config.heroku_app_name = 'test'
         end
       }.to raise_error(
-        SolidQueueHerokuAutoscaler::ConfigurationError,
+        SolidQueueAutoscaler::ConfigurationError,
         /heroku_api_key is required/
       )
     end
@@ -399,13 +399,13 @@ RSpec.describe 'Error handling' do
 
   describe 'HerokuAPIError' do
     let(:config) { configure_autoscaler }
-    let(:client) { SolidQueueHerokuAutoscaler::HerokuClient.new(config: config) }
+    let(:client) { SolidQueueAutoscaler::HerokuClient.new(config: config) }
 
     it 'includes status code and body' do
       stub_heroku_error(status: 429, body: 'Rate limit exceeded')
 
       expect { client.scale(5) }.to raise_error(
-        SolidQueueHerokuAutoscaler::HerokuAPIError
+        SolidQueueAutoscaler::HerokuAPIError
       ) do |error|
         expect(error.status_code).to eq(429)
         expect(error.response_body).to include('Rate limit')
@@ -416,12 +416,12 @@ RSpec.describe 'Error handling' do
   describe 'LockError' do
     it 'raises when lock unavailable' do
       # Simulate another instance holding the lock
-      lock1 = SolidQueueHerokuAutoscaler::AdvisoryLock.new
+      lock1 = SolidQueueAutoscaler::AdvisoryLock.new
       lock1.acquire!
 
-      lock2 = SolidQueueHerokuAutoscaler::AdvisoryLock.new
+      lock2 = SolidQueueAutoscaler::AdvisoryLock.new
       expect { lock2.acquire! }.to raise_error(
-        SolidQueueHerokuAutoscaler::LockError
+        SolidQueueAutoscaler::LockError
       )
     ensure
       lock1&.release

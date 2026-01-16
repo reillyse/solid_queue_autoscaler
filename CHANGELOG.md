@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2025-01-16
+
+### Changed
+
+- **Renamed gem** from `solid_queue_heroku_autoscaler` to `solid_queue_autoscaler` to better reflect multi-platform support (Heroku, Kubernetes, custom adapters)
+- **Renamed module** from `SolidQueueHerokuAutoscaler` to `SolidQueueAutoscaler`
+- Version reset to 1.0.0 for the new gem name
+
+### Migration from solid_queue_heroku_autoscaler
+
+1. Update your Gemfile:
+   ```ruby
+   # Old
+   gem "solid_queue_heroku_autoscaler"
+   # New
+   gem "solid_queue_autoscaler"
+   ```
+
+2. Update your initializer:
+   ```ruby
+   # Old
+   SolidQueueHerokuAutoscaler.configure do |config|
+   # New
+   SolidQueueAutoscaler.configure do |config|
+   ```
+
+3. Update any rake task references:
+   ```bash
+   # Old
+   rake solid_queue_heroku_autoscaler:scale
+   # New  
+   rake solid_queue_autoscaler:scale
+   ```
+
 ## [0.2.1] - 2025-01-16
 
 ### Fixed
@@ -26,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ScaleEvent model**: Tracks all scaling decisions in the database
 - **Event recording configuration**: `record_events` and `record_all_events` options
 - **New rake tasks**: `events`, `cleanup_events` for managing scale event history
-- **Dashboard generator**: `rails generate solid_queue_heroku_autoscaler:dashboard`
+- **Dashboard generator**: `rails generate solid_queue_autoscaler:dashboard`
 - **Ruby 3.4 support**: Added CI testing for Ruby 3.4
 
 ## [0.1.0] - 2025-01-19
@@ -81,14 +115,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Configuration Options
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure(:worker_name) do |config|
+SolidQueueAutoscaler.configure(:worker_name) do |config|
   # Heroku settings
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
   config.process_type = 'worker'
 
   # Kubernetes settings (alternative to Heroku)
-  # config.adapter_class = SolidQueueHerokuAutoscaler::Adapters::Kubernetes
+  # config.adapter_class = SolidQueueAutoscaler::Adapters::Kubernetes
   # config.kubernetes_deployment = 'my-worker'
   # config.kubernetes_namespace = 'production'
 
@@ -134,21 +168,22 @@ end
 
 ```ruby
 # Scale default worker
-SolidQueueHerokuAutoscaler.scale!
+SolidQueueAutoscaler.scale!
 
 # Scale specific worker type
-SolidQueueHerokuAutoscaler.scale!(:critical_worker)
+SolidQueueAutoscaler.scale!(:critical_worker)
 
 # Scale all configured workers
-SolidQueueHerokuAutoscaler.scale_all!
+SolidQueueAutoscaler.scale_all!
 
 # Get metrics for a worker
-metrics = SolidQueueHerokuAutoscaler.metrics(:default)
+metrics = SolidQueueAutoscaler.metrics(:default)
 
 # List registered workers
-SolidQueueHerokuAutoscaler.registered_workers
+SolidQueueAutoscaler.registered_workers
 ```
 
+[1.0.0]: https://github.com/reillyse/solid_queue_autoscaler/releases/tag/v1.0.0
 [0.2.1]: https://github.com/reillyse/solid_queue_heroku_autoscaler/releases/tag/v0.2.1
 [0.2.0]: https://github.com/reillyse/solid_queue_heroku_autoscaler/releases/tag/v0.2.0
 [0.1.0]: https://github.com/reillyse/solid_queue_heroku_autoscaler/releases/tag/v0.1.0

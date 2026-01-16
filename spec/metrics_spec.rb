@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-RSpec.describe SolidQueueHerokuAutoscaler::Metrics do
+RSpec.describe SolidQueueAutoscaler::Metrics do
   let(:logger) { instance_double(Logger, info: nil, debug: nil, warn: nil, error: nil) }
   let(:connection) { instance_double('ActiveRecord::ConnectionAdapters::PostgreSQLAdapter') }
 
   let(:config) do
-    SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+    SolidQueueAutoscaler::Configuration.new.tap do |c|
       c.heroku_api_key = 'test-key'
       c.heroku_app_name = 'test-app'
       c.database_connection = connection
@@ -19,7 +19,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Metrics do
     allow(connection).to receive(:quote) { |val| "'#{val}'" }
   end
 
-  describe SolidQueueHerokuAutoscaler::Metrics::Result do
+  describe SolidQueueAutoscaler::Metrics::Result do
     let(:collected_at) { Time.now }
     let(:result) do
       described_class.new(
@@ -578,7 +578,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Metrics do
 
     it 'returns a Result struct' do
       result = metrics.collect
-      expect(result).to be_a(SolidQueueHerokuAutoscaler::Metrics::Result)
+      expect(result).to be_a(SolidQueueAutoscaler::Metrics::Result)
     end
 
     it 'collects all metrics' do

@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-RSpec.describe SolidQueueHerokuAutoscaler::CooldownTracker do
+RSpec.describe SolidQueueAutoscaler::CooldownTracker do
   let(:config) do
     configure_autoscaler(
       cooldown_seconds: 120,
       scale_up_cooldown_seconds: 60,
       scale_down_cooldown_seconds: 180
     )
-    SolidQueueHerokuAutoscaler.config
+    SolidQueueAutoscaler.config
   end
 
   let(:connection) { double('connection') }

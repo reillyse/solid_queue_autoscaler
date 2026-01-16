@@ -12,31 +12,31 @@
 
 1. **Is it enabled?**
    ```ruby
-   puts SolidQueueHerokuAutoscaler.config.enabled?  # Should be true
+   puts SolidQueueAutoscaler.config.enabled?  # Should be true
    ```
 
 2. **Is it in dry-run mode?**
    ```ruby
-   puts SolidQueueHerokuAutoscaler.config.dry_run?  # Should be false for real scaling
+   puts SolidQueueAutoscaler.config.dry_run?  # Should be false for real scaling
    ```
 
 3. **Are Heroku credentials set?**
    ```ruby
-   puts SolidQueueHerokuAutoscaler.config.heroku_api_key.present?
-   puts SolidQueueHerokuAutoscaler.config.heroku_app_name
+   puts SolidQueueAutoscaler.config.heroku_api_key.present?
+   puts SolidQueueAutoscaler.config.heroku_app_name
    ```
 
 4. **Check current metrics:**
    ```ruby
-   metrics = SolidQueueHerokuAutoscaler.metrics
+   metrics = SolidQueueAutoscaler.metrics
    puts "Queue depth: #{metrics.queue_depth}"
    puts "Latency: #{metrics.oldest_job_age_seconds}s"
-   puts "Threshold: #{SolidQueueHerokuAutoscaler.config.scale_up_queue_depth}"
+   puts "Threshold: #{SolidQueueAutoscaler.config.scale_up_queue_depth}"
    ```
 
 5. **Try manual scale:**
    ```ruby
-   result = SolidQueueHerokuAutoscaler.scale!
+   result = SolidQueueAutoscaler.scale!
    puts result.decision.inspect
    puts result.skipped_reason if result.skipped?
    ```
@@ -65,7 +65,7 @@
 2. **Force release (use with caution):**
    ```ruby
    # Only if you're certain no autoscaler is running
-   lock_key = SolidQueueHerokuAutoscaler.config.lock_key
+   lock_key = SolidQueueAutoscaler.config.lock_key
    lock_id = Zlib.crc32(lock_key) & 0x7FFFFFFF
    ActiveRecord::Base.connection.execute("SELECT pg_advisory_unlock(#{lock_id})")
    ```
@@ -90,14 +90,14 @@
 
 2. **Reduce cooldown (if appropriate):**
    ```ruby
-   SolidQueueHerokuAutoscaler.configure do |config|
+   SolidQueueAutoscaler.configure do |config|
      config.cooldown_seconds = 60  # Default is 120
    end
    ```
 
 3. **Reset cooldowns (testing only):**
    ```ruby
-   SolidQueueHerokuAutoscaler::Scaler.reset_cooldowns!
+   SolidQueueAutoscaler::Scaler.reset_cooldowns!
    ```
 
 ---
@@ -111,15 +111,15 @@
 
 1. **Are you above min_workers?**
    ```ruby
-   current = SolidQueueHerokuAutoscaler.current_workers
-   min = SolidQueueHerokuAutoscaler.config.min_workers
+   current = SolidQueueAutoscaler.current_workers
+   min = SolidQueueAutoscaler.config.min_workers
    puts "Current: #{current}, Min: #{min}"
    ```
 
 2. **Check scale-down thresholds:**
    ```ruby
-   metrics = SolidQueueHerokuAutoscaler.metrics
-   config = SolidQueueHerokuAutoscaler.config
+   metrics = SolidQueueAutoscaler.metrics
+   config = SolidQueueAutoscaler.config
    
    puts "Queue depth: #{metrics.queue_depth} (threshold: #{config.scale_down_queue_depth})"
    puts "Latency: #{metrics.oldest_job_age_seconds}s (threshold: #{config.scale_down_latency_seconds}s)"
@@ -229,7 +229,7 @@ MetricsError: relation "solid_queue_ready_executions" does not exist
 
 3. **If using separate database:**
    ```ruby
-   SolidQueueHerokuAutoscaler.configure do |config|
+   SolidQueueAutoscaler.configure do |config|
      config.database_connection = SolidQueue::Record.connection
    end
    ```
@@ -248,7 +248,7 @@ MetricsError: relation "solid_queue_ready_executions" does not exist
    ```yaml
    # config/recurring.yml
    autoscaler:
-     class: SolidQueueHerokuAutoscaler::AutoscaleJob
+     class: SolidQueueAutoscaler::AutoscaleJob
      queue: autoscaler
      schedule: every 30 seconds
    ```
@@ -275,7 +275,7 @@ MetricsError: relation "solid_queue_ready_executions" does not exist
 
 5. **Manually enqueue to test:**
    ```ruby
-   SolidQueueHerokuAutoscaler::AutoscaleJob.perform_later
+   SolidQueueAutoscaler::AutoscaleJob.perform_later
    ```
 
 ---
@@ -289,7 +289,7 @@ MetricsError: relation "solid_queue_ready_executions" does not exist
 
 1. **Check process_type configuration:**
    ```ruby
-   puts SolidQueueHerokuAutoscaler.config.process_type
+   puts SolidQueueAutoscaler.config.process_type
    # Should match your Procfile entry
    ```
 
@@ -311,7 +311,7 @@ MetricsError: relation "solid_queue_ready_executions" does not exist
 ### Enable Debug Logging
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.logger = Logger.new(STDOUT)
   config.logger.level = Logger::DEBUG
 end
@@ -320,18 +320,18 @@ end
 ### Check All Metrics
 
 ```ruby
-metrics = SolidQueueHerokuAutoscaler.metrics
+metrics = SolidQueueAutoscaler.metrics
 puts metrics.to_h.to_yaml
 ```
 
 ### Simulate Scaling Decision
 
 ```ruby
-config = SolidQueueHerokuAutoscaler.config
-metrics = SolidQueueHerokuAutoscaler.metrics
-current = SolidQueueHerokuAutoscaler.current_workers
+config = SolidQueueAutoscaler.config
+metrics = SolidQueueAutoscaler.metrics
+current = SolidQueueAutoscaler.current_workers
 
-engine = SolidQueueHerokuAutoscaler::DecisionEngine.new(config: config)
+engine = SolidQueueAutoscaler::DecisionEngine.new(config: config)
 decision = engine.decide(metrics: metrics, current_workers: current)
 
 puts "Action: #{decision.action}"
@@ -343,7 +343,7 @@ puts "Reason: #{decision.reason}"
 ### Test Heroku Connection
 
 ```ruby
-client = SolidQueueHerokuAutoscaler::HerokuClient.new
+client = SolidQueueAutoscaler::HerokuClient.new
 puts "Current workers: #{client.current_formation}"
 puts "All formations: #{client.formation_list.inspect}"
 ```
@@ -351,7 +351,7 @@ puts "All formations: #{client.formation_list.inspect}"
 ### Check Lock Status
 
 ```ruby
-lock = SolidQueueHerokuAutoscaler::AdvisoryLock.new
+lock = SolidQueueAutoscaler::AdvisoryLock.new
 if lock.try_lock
   puts "Lock acquired - no other instance running"
   lock.release
@@ -376,7 +376,7 @@ puts "=" * 60
 
 # Configuration
 puts "\n📋 Configuration:"
-config = SolidQueueHerokuAutoscaler.config
+config = SolidQueueAutoscaler.config
 puts "  Enabled: #{config.enabled?}"
 puts "  Dry Run: #{config.dry_run?}"
 puts "  Heroku App: #{config.heroku_app_name}"
@@ -391,7 +391,7 @@ puts "  Cooldown: #{config.cooldown_seconds}s"
 # Metrics
 puts "\n📊 Current Metrics:"
 begin
-  metrics = SolidQueueHerokuAutoscaler.metrics
+  metrics = SolidQueueAutoscaler.metrics
   puts "  Queue Depth: #{metrics.queue_depth}"
   puts "  Oldest Job Age: #{metrics.oldest_job_age_seconds.round(1)}s"
   puts "  Jobs/Minute: #{metrics.jobs_per_minute}"
@@ -407,7 +407,7 @@ end
 # Heroku
 puts "\n🚀 Heroku Status:"
 begin
-  workers = SolidQueueHerokuAutoscaler.current_workers
+  workers = SolidQueueAutoscaler.current_workers
   puts "  Current #{config.process_type} dynos: #{workers}"
 rescue => e
   puts "  ❌ Error: #{e.message}"
@@ -415,7 +415,7 @@ end
 
 # Lock
 puts "\n🔒 Advisory Lock:"
-lock = SolidQueueHerokuAutoscaler::AdvisoryLock.new
+lock = SolidQueueAutoscaler::AdvisoryLock.new
 if lock.try_lock
   puts "  Lock available (acquired and released)"
   lock.release
@@ -426,9 +426,9 @@ end
 # Decision
 puts "\n🤔 Scaling Decision:"
 begin
-  metrics = SolidQueueHerokuAutoscaler.metrics
-  workers = SolidQueueHerokuAutoscaler.current_workers
-  engine = SolidQueueHerokuAutoscaler::DecisionEngine.new
+  metrics = SolidQueueAutoscaler.metrics
+  workers = SolidQueueAutoscaler.current_workers
+  engine = SolidQueueAutoscaler::DecisionEngine.new
   decision = engine.decide(metrics: metrics, current_workers: workers)
   
   puts "  Action: #{decision.action}"
@@ -444,7 +444,7 @@ begin
   original_dry_run = config.dry_run
   config.dry_run = true
   
-  result = SolidQueueHerokuAutoscaler.scale!
+  result = SolidQueueAutoscaler.scale!
   
   if result.success?
     if result.scaled?

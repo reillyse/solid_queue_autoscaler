@@ -12,7 +12,7 @@ The Heroku adapter uses the [Heroku Platform API](https://devcenter.heroku.com/a
 
 ```ruby
 # This is the default - no explicit configuration needed
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
   config.process_type = 'worker'
@@ -32,8 +32,8 @@ The Kubernetes adapter uses the [kubeclient gem](https://github.com/ManageIQ/kub
 When running inside a Kubernetes pod, the adapter automatically uses the pod's service account:
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
-  config.adapter_class = SolidQueueHerokuAutoscaler::Adapters::Kubernetes
+SolidQueueAutoscaler.configure do |config|
+  config.adapter_class = SolidQueueAutoscaler::Adapters::Kubernetes
   config.kubernetes_deployment = 'my-worker-deployment'
   config.kubernetes_namespace = 'production'
   
@@ -48,8 +48,8 @@ end
 When running outside the cluster, the adapter uses your kubeconfig file:
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
-  config.adapter_class = SolidQueueHerokuAutoscaler::Adapters::Kubernetes
+SolidQueueAutoscaler.configure do |config|
+  config.adapter_class = SolidQueueAutoscaler::Adapters::Kubernetes
   config.kubernetes_deployment = 'my-worker-deployment'
   config.kubernetes_namespace = 'default'
   config.kubernetes_context = 'my-cluster-context'  # Optional: specific context
@@ -100,12 +100,12 @@ roleRef:
 
 ### Step 1: Create the Adapter Class
 
-Create a new file that inherits from `SolidQueueHerokuAutoscaler::Adapters::Base`:
+Create a new file that inherits from `SolidQueueAutoscaler::Adapters::Base`:
 
 ```ruby
 # lib/my_app/autoscaler_adapters/aws_ecs.rb
 
-class AwsEcsAdapter < SolidQueueHerokuAutoscaler::Adapters::Base
+class AwsEcsAdapter < SolidQueueAutoscaler::Adapters::Base
   # Required: Get current worker count
   def current_workers
     # Call your infrastructure API
@@ -169,7 +169,7 @@ There are two ways to use your custom adapter:
 #### Option A: Set the adapter class
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.adapter_class = AwsEcsAdapter
   
   # Your custom configuration
@@ -185,7 +185,7 @@ end
 #### Option B: Set a pre-configured adapter instance
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   # Create adapter with custom initialization
   adapter = AwsEcsAdapter.new(config: config)
   config.adapter = adapter
@@ -204,11 +204,11 @@ If your adapter needs custom configuration options, you can extend the Configura
 # config/initializers/autoscaler.rb
 
 # Add custom attributes to Configuration
-SolidQueueHerokuAutoscaler::Configuration.class_eval do
+SolidQueueAutoscaler::Configuration.class_eval do
   attr_accessor :aws_cluster, :aws_service, :aws_region
 end
 
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.adapter_class = AwsEcsAdapter
   config.aws_cluster = ENV['AWS_ECS_CLUSTER']
   config.aws_service = ENV['AWS_ECS_SERVICE']
@@ -248,7 +248,7 @@ end
 ### Google Cloud Run
 
 ```ruby
-class CloudRunAdapter < SolidQueueHerokuAutoscaler::Adapters::Base
+class CloudRunAdapter < SolidQueueAutoscaler::Adapters::Base
   def current_workers
     service = run_client.get_service(service_path)
     service.spec.template.spec.container_concurrency || 1
@@ -306,7 +306,7 @@ end
 ### Render
 
 ```ruby
-class RenderAdapter < SolidQueueHerokuAutoscaler::Adapters::Base
+class RenderAdapter < SolidQueueAutoscaler::Adapters::Base
   def current_workers
     response = http_client.get("/services/#{service_id}")
     JSON.parse(response.body)['numInstances']
@@ -363,7 +363,7 @@ end
 ```ruby
 RSpec.describe AwsEcsAdapter do
   let(:config) do
-    SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+    SolidQueueAutoscaler::Configuration.new.tap do |c|
       c.aws_cluster = 'test-cluster'
       c.aws_service = 'test-service'
     end
@@ -425,20 +425,20 @@ Gem::Specification.new do |spec|
   spec.version = '0.1.0'
   spec.summary = 'AWS ECS adapter for Solid Queue Autoscaler'
   
-  spec.add_dependency 'solid_queue_heroku_autoscaler', '~> 0.1'
+  spec.add_dependency 'solid_queue_autoscaler', '~> 0.1'
   spec.add_dependency 'aws-sdk-ecs', '~> 1.0'
 end
 ```
 
 ```ruby
 # lib/solid_queue_autoscaler_aws.rb
-require 'solid_queue_heroku_autoscaler'
+require 'solid_queue_autoscaler'
 require 'aws-sdk-ecs'
 
 require_relative 'solid_queue_autoscaler_aws/ecs_adapter'
 
 # Register the adapter
-SolidQueueHerokuAutoscaler::Adapters.register(:aws_ecs, SolidQueueAutoscalerAws::EcsAdapter)
+SolidQueueAutoscaler::Adapters.register(:aws_ecs, SolidQueueAutoscalerAws::EcsAdapter)
 ```
 
 ## Troubleshooting

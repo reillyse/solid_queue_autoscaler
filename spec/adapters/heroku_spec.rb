@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku do
+RSpec.describe SolidQueueAutoscaler::Adapters::Heroku do
   let(:logger) { instance_double(Logger, info: nil, debug: nil, warn: nil, error: nil) }
 
   let(:config) do
-    SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+    SolidQueueAutoscaler::Configuration.new.tap do |c|
       c.heroku_api_key = 'test-api-key-12345'
       c.heroku_app_name = 'my-test-app'
       c.process_type = 'worker'
@@ -149,23 +149,23 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku do
 
       it 'raises HerokuAPIError' do
         expect { adapter.current_workers }
-          .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Failed to get formation info/)
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Failed to get formation info/)
       end
 
       it 'includes the original error message' do
         expect { adapter.current_workers }
-          .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Not Found/)
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Not Found/)
       end
 
       it 'captures status code in error' do
         adapter.current_workers
-      rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+      rescue SolidQueueAutoscaler::HerokuAPIError => e
         expect(e.status_code).to eq(404)
       end
 
       it 'captures response body in error' do
         adapter.current_workers
-      rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+      rescue SolidQueueAutoscaler::HerokuAPIError => e
         expect(e.response_body).to include('not_found')
       end
     end
@@ -178,7 +178,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku do
 
       it 'raises HerokuAPIError' do
         expect { adapter.current_workers }
-          .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError)
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError)
       end
     end
 
@@ -264,22 +264,22 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku do
 
       it 'raises HerokuAPIError' do
         expect { adapter.scale(5) }
-          .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Failed to scale worker to 5/)
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Failed to scale worker to 5/)
       end
 
       it 'includes the process type in error' do
         expect { adapter.scale(5) }
-          .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /worker/)
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /worker/)
       end
 
       it 'includes the target quantity in error' do
         expect { adapter.scale(5) }
-          .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /5/)
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /5/)
       end
 
       it 'includes the original error message' do
         expect { adapter.scale(5) }
-          .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /rate limit/)
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /rate limit/)
       end
     end
 
@@ -333,7 +333,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku do
 
       it 'raises HerokuAPIError' do
         expect { adapter.formation_list }
-          .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Failed to list formations/)
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Failed to list formations/)
       end
     end
   end
@@ -348,7 +348,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku do
       end
 
       it 'uses API key from environment when not explicitly set' do
-        fresh_config = SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+        fresh_config = SolidQueueAutoscaler::Configuration.new.tap do |c|
           c.heroku_app_name = 'env-app'
           c.dry_run = false
           c.logger = logger
@@ -372,7 +372,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku do
       end
 
       it 'uses app name from environment when not explicitly set' do
-        fresh_config = SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+        fresh_config = SolidQueueAutoscaler::Configuration.new.tap do |c|
           c.heroku_api_key = 'test-key'
           c.dry_run = false
           c.logger = logger
@@ -406,7 +406,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku do
 
   describe 'integration with base class' do
     it 'inherits from Base' do
-      expect(described_class.superclass).to eq(SolidQueueHerokuAutoscaler::Adapters::Base)
+      expect(described_class.superclass).to eq(SolidQueueAutoscaler::Adapters::Base)
     end
 
     it 'has access to config' do
@@ -429,11 +429,11 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku do
 end
 
 # Integration-style tests using mocked PlatformAPI for error scenarios
-RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku, 'Error Scenarios' do
+RSpec.describe SolidQueueAutoscaler::Adapters::Heroku, 'Error Scenarios' do
   let(:logger) { instance_double(Logger, info: nil, debug: nil, warn: nil, error: nil) }
 
   let(:config) do
-    SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+    SolidQueueAutoscaler::Configuration.new.tap do |c|
       c.heroku_api_key = 'test-oauth-token'
       c.heroku_app_name = 'my-heroku-app'
       c.process_type = 'worker'
@@ -473,12 +473,12 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku, 'Error Scenarios' d
 
     it 'raises HerokuAPIError for invalid credentials' do
       expect { adapter.current_workers }
-        .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Unauthorized/)
+        .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Unauthorized/)
     end
 
     it 'captures the 401 status code' do
       adapter.current_workers
-    rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+    rescue SolidQueueAutoscaler::HerokuAPIError => e
       expect(e.status_code).to eq(401)
     end
   end
@@ -496,12 +496,12 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku, 'Error Scenarios' d
 
     it 'raises HerokuAPIError for forbidden access' do
       expect { adapter.scale(5) }
-        .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Forbidden/)
+        .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Forbidden/)
     end
 
     it 'captures the 403 status code' do
       adapter.scale(5)
-    rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+    rescue SolidQueueAutoscaler::HerokuAPIError => e
       expect(e.status_code).to eq(403)
     end
   end
@@ -519,12 +519,12 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku, 'Error Scenarios' d
 
     it 'raises HerokuAPIError for missing formation' do
       expect { adapter.current_workers }
-        .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Not Found/)
+        .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Not Found/)
     end
 
     it 'captures the 404 status code' do
       adapter.current_workers
-    rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+    rescue SolidQueueAutoscaler::HerokuAPIError => e
       expect(e.status_code).to eq(404)
     end
   end
@@ -542,12 +542,12 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku, 'Error Scenarios' d
 
     it 'raises HerokuAPIError for invalid parameters' do
       expect { adapter.scale(500) }
-        .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Unprocessable Entity/)
+        .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Unprocessable Entity/)
     end
 
     it 'captures the 422 status code' do
       adapter.scale(500)
-    rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+    rescue SolidQueueAutoscaler::HerokuAPIError => e
       expect(e.status_code).to eq(422)
     end
   end
@@ -565,12 +565,12 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku, 'Error Scenarios' d
 
     it 'raises HerokuAPIError for rate limiting' do
       expect { adapter.current_workers }
-        .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Too Many Requests/)
+        .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Too Many Requests/)
     end
 
     it 'captures the 429 status code' do
       adapter.current_workers
-    rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+    rescue SolidQueueAutoscaler::HerokuAPIError => e
       expect(e.status_code).to eq(429)
     end
   end
@@ -588,12 +588,12 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku, 'Error Scenarios' d
 
     it 'raises HerokuAPIError for server errors' do
       expect { adapter.current_workers }
-        .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Internal Server Error/)
+        .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Internal Server Error/)
     end
 
     it 'captures the 500 status code' do
       adapter.current_workers
-    rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+    rescue SolidQueueAutoscaler::HerokuAPIError => e
       expect(e.status_code).to eq(500)
     end
   end
@@ -611,12 +611,12 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku, 'Error Scenarios' d
 
     it 'raises HerokuAPIError when service is unavailable' do
       expect { adapter.scale(3) }
-        .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Service Unavailable/)
+        .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Service Unavailable/)
     end
 
     it 'captures the 503 status code' do
       adapter.scale(3)
-    rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+    rescue SolidQueueAutoscaler::HerokuAPIError => e
       expect(e.status_code).to eq(503)
     end
   end
@@ -658,7 +658,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku, 'Error Scenarios' d
 
     it 'raises HerokuAPIError when app not found' do
       expect { adapter.formation_list }
-        .to raise_error(SolidQueueHerokuAutoscaler::HerokuAPIError, /Failed to list formations/)
+        .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Failed to list formations/)
     end
   end
 end

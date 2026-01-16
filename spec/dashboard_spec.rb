@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
+RSpec.describe SolidQueueAutoscaler::Dashboard do
   let(:config) do
     configure_autoscaler(
       min_workers: 1,
@@ -11,11 +11,11 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
       scale_down_latency_seconds: 30,
       queues: %w[default mailers]
     )
-    SolidQueueHerokuAutoscaler.config
+    SolidQueueAutoscaler.config
   end
 
   let(:metrics_result) do
-    SolidQueueHerokuAutoscaler::Metrics::Result.new(
+    SolidQueueAutoscaler::Metrics::Result.new(
       queue_depth: 50,
       oldest_job_age_seconds: 60.0,
       jobs_per_minute: 100,
@@ -30,7 +30,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
 
   let(:adapter) do
     instance_double(
-      SolidQueueHerokuAutoscaler::Adapters::Heroku,
+      SolidQueueAutoscaler::Adapters::Heroku,
       current_workers: 3,
       name: 'Heroku',
       configuration_errors: []
@@ -48,7 +48,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
   describe '.status' do
     it 'returns status for all registered workers' do
       configure_autoscaler
-      allow(SolidQueueHerokuAutoscaler).to receive(:registered_workers).and_return([:default])
+      allow(SolidQueueAutoscaler).to receive(:registered_workers).and_return([:default])
       allow(described_class).to receive(:worker_status).and_return({ name: :default })
 
       status = described_class.status
@@ -57,7 +57,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
     end
 
     it 'returns status for default worker when no workers registered' do
-      allow(SolidQueueHerokuAutoscaler).to receive(:registered_workers).and_return([])
+      allow(SolidQueueAutoscaler).to receive(:registered_workers).and_return([])
       allow(described_class).to receive(:worker_status).and_return({ name: :default })
 
       status = described_class.status
@@ -66,11 +66,11 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
     end
 
     it 'returns status for multiple workers' do
-      SolidQueueHerokuAutoscaler.configure(:worker_a) do |c|
+      SolidQueueAutoscaler.configure(:worker_a) do |c|
         c.heroku_api_key = 'test'
         c.heroku_app_name = 'test'
       end
-      SolidQueueHerokuAutoscaler.configure(:worker_b) do |c|
+      SolidQueueAutoscaler.configure(:worker_b) do |c|
         c.heroku_api_key = 'test'
         c.heroku_app_name = 'test'
       end
@@ -84,16 +84,16 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
   end
 
   describe '.worker_status' do
-    let(:tracker) { instance_double(SolidQueueHerokuAutoscaler::CooldownTracker) }
+    let(:tracker) { instance_double(SolidQueueAutoscaler::CooldownTracker) }
 
     before do
-      allow(SolidQueueHerokuAutoscaler::CooldownTracker).to receive(:new).and_return(tracker)
+      allow(SolidQueueAutoscaler::CooldownTracker).to receive(:new).and_return(tracker)
       allow(tracker).to receive(:scale_up_cooldown_remaining).and_return(30.5)
       allow(tracker).to receive(:scale_down_cooldown_remaining).and_return(0.0)
       allow(tracker).to receive(:last_scale_up_at).and_return(Time.current - 90.seconds)
       allow(tracker).to receive(:last_scale_down_at).and_return(nil)
-      allow(SolidQueueHerokuAutoscaler).to receive(:metrics).and_return(metrics_result)
-      allow(SolidQueueHerokuAutoscaler).to receive(:current_workers).and_return(3)
+      allow(SolidQueueAutoscaler).to receive(:metrics).and_return(metrics_result)
+      allow(SolidQueueAutoscaler).to receive(:current_workers).and_return(3)
     end
 
     it 'returns worker name' do
@@ -167,7 +167,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
     end
 
     it 'handles metrics collection errors gracefully' do
-      allow(SolidQueueHerokuAutoscaler).to receive(:metrics).and_raise(StandardError.new('DB error'))
+      allow(SolidQueueAutoscaler).to receive(:metrics).and_raise(StandardError.new('DB error'))
 
       status = described_class.worker_status(:default)
 
@@ -176,7 +176,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
     end
 
     it 'handles current_workers errors gracefully' do
-      allow(SolidQueueHerokuAutoscaler).to receive(:current_workers).and_raise(StandardError.new('API error'))
+      allow(SolidQueueAutoscaler).to receive(:current_workers).and_raise(StandardError.new('API error'))
 
       status = described_class.worker_status(:default)
 
@@ -184,7 +184,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
     end
 
     it 'returns default queues when none configured' do
-      SolidQueueHerokuAutoscaler.configure(:no_queues) do |c|
+      SolidQueueAutoscaler.configure(:no_queues) do |c|
         c.heroku_api_key = 'test'
         c.heroku_app_name = 'test'
         c.queues = nil
@@ -199,32 +199,32 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
   describe '.recent_events' do
     it 'delegates to ScaleEvent.recent' do
       events = [
-        SolidQueueHerokuAutoscaler::ScaleEvent.new(action: 'scale_up'),
-        SolidQueueHerokuAutoscaler::ScaleEvent.new(action: 'scale_down')
+        SolidQueueAutoscaler::ScaleEvent.new(action: 'scale_up'),
+        SolidQueueAutoscaler::ScaleEvent.new(action: 'scale_down')
       ]
-      allow(SolidQueueHerokuAutoscaler::ScaleEvent).to receive(:recent).and_return(events)
+      allow(SolidQueueAutoscaler::ScaleEvent).to receive(:recent).and_return(events)
 
       result = described_class.recent_events(limit: 20)
 
-      expect(SolidQueueHerokuAutoscaler::ScaleEvent).to have_received(:recent).with(limit: 20, worker_name: nil)
+      expect(SolidQueueAutoscaler::ScaleEvent).to have_received(:recent).with(limit: 20, worker_name: nil)
       expect(result).to eq(events)
     end
 
     it 'passes worker_name filter' do
-      allow(SolidQueueHerokuAutoscaler::ScaleEvent).to receive(:recent).and_return([])
+      allow(SolidQueueAutoscaler::ScaleEvent).to receive(:recent).and_return([])
 
       described_class.recent_events(limit: 10, worker_name: 'critical')
 
-      expect(SolidQueueHerokuAutoscaler::ScaleEvent).to have_received(:recent)
+      expect(SolidQueueAutoscaler::ScaleEvent).to have_received(:recent)
         .with(limit: 10, worker_name: 'critical')
     end
 
     it 'uses default limit of 50' do
-      allow(SolidQueueHerokuAutoscaler::ScaleEvent).to receive(:recent).and_return([])
+      allow(SolidQueueAutoscaler::ScaleEvent).to receive(:recent).and_return([])
 
       described_class.recent_events
 
-      expect(SolidQueueHerokuAutoscaler::ScaleEvent).to have_received(:recent)
+      expect(SolidQueueAutoscaler::ScaleEvent).to have_received(:recent)
         .with(limit: 50, worker_name: nil)
     end
   end
@@ -232,7 +232,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
   describe '.event_stats' do
     it 'delegates to ScaleEvent.stats' do
       stats = { total: 10, scale_up_count: 5 }
-      allow(SolidQueueHerokuAutoscaler::ScaleEvent).to receive(:stats).and_return(stats)
+      allow(SolidQueueAutoscaler::ScaleEvent).to receive(:stats).and_return(stats)
 
       result = described_class.event_stats
 
@@ -241,29 +241,29 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
 
     it 'passes since parameter' do
       since_time = 1.hour.ago
-      allow(SolidQueueHerokuAutoscaler::ScaleEvent).to receive(:stats).and_return({})
+      allow(SolidQueueAutoscaler::ScaleEvent).to receive(:stats).and_return({})
 
       described_class.event_stats(since: since_time)
 
-      expect(SolidQueueHerokuAutoscaler::ScaleEvent).to have_received(:stats)
+      expect(SolidQueueAutoscaler::ScaleEvent).to have_received(:stats)
         .with(since: since_time, worker_name: nil)
     end
 
     it 'passes worker_name filter' do
-      allow(SolidQueueHerokuAutoscaler::ScaleEvent).to receive(:stats).and_return({})
+      allow(SolidQueueAutoscaler::ScaleEvent).to receive(:stats).and_return({})
 
       described_class.event_stats(worker_name: 'batch')
 
-      expect(SolidQueueHerokuAutoscaler::ScaleEvent).to have_received(:stats)
+      expect(SolidQueueAutoscaler::ScaleEvent).to have_received(:stats)
         .with(hash_including(worker_name: 'batch'))
     end
 
     it 'uses default since of 24 hours ago' do
-      allow(SolidQueueHerokuAutoscaler::ScaleEvent).to receive(:stats).and_return({})
+      allow(SolidQueueAutoscaler::ScaleEvent).to receive(:stats).and_return({})
 
       described_class.event_stats
 
-      expect(SolidQueueHerokuAutoscaler::ScaleEvent).to have_received(:stats) do |args|
+      expect(SolidQueueAutoscaler::ScaleEvent).to have_received(:stats) do |args|
         expect(args[:since]).to be_within(1.minute).of(24.hours.ago)
       end
     end
@@ -271,13 +271,13 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
 
   describe '.events_table_available?' do
     it 'returns true when table exists' do
-      allow(SolidQueueHerokuAutoscaler::ScaleEvent).to receive(:table_exists?).and_return(true)
+      allow(SolidQueueAutoscaler::ScaleEvent).to receive(:table_exists?).and_return(true)
 
       expect(described_class.events_table_available?).to be(true)
     end
 
     it 'returns false when table does not exist' do
-      allow(SolidQueueHerokuAutoscaler::ScaleEvent).to receive(:table_exists?).and_return(false)
+      allow(SolidQueueAutoscaler::ScaleEvent).to receive(:table_exists?).and_return(false)
 
       expect(described_class.events_table_available?).to be(false)
     end
@@ -285,9 +285,9 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
 
   describe 'integration with multi-worker configuration' do
     before do
-      SolidQueueHerokuAutoscaler.reset_configuration!
+      SolidQueueAutoscaler.reset_configuration!
 
-      SolidQueueHerokuAutoscaler.configure(:critical_worker) do |c|
+      SolidQueueAutoscaler.configure(:critical_worker) do |c|
         c.heroku_api_key = 'test'
         c.heroku_app_name = 'test'
         c.process_type = 'critical'
@@ -296,7 +296,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
         c.max_workers = 20
       end
 
-      SolidQueueHerokuAutoscaler.configure(:default_worker) do |c|
+      SolidQueueAutoscaler.configure(:default_worker) do |c|
         c.heroku_api_key = 'test'
         c.heroku_app_name = 'test'
         c.process_type = 'worker'
@@ -308,8 +308,8 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
 
     it 'returns status for all configured workers' do
       # Stub out metrics and workers to avoid real API/DB calls
-      allow(SolidQueueHerokuAutoscaler).to receive(:metrics).and_return(nil)
-      allow(SolidQueueHerokuAutoscaler).to receive(:current_workers).and_return(0)
+      allow(SolidQueueAutoscaler).to receive(:metrics).and_return(nil)
+      allow(SolidQueueAutoscaler).to receive(:current_workers).and_return(0)
 
       status = described_class.status
 
@@ -317,8 +317,8 @@ RSpec.describe SolidQueueHerokuAutoscaler::Dashboard do
     end
 
     it 'returns correct configuration for each worker' do
-      allow(SolidQueueHerokuAutoscaler).to receive(:metrics).and_return(nil)
-      allow(SolidQueueHerokuAutoscaler).to receive(:current_workers).and_return(0)
+      allow(SolidQueueAutoscaler).to receive(:metrics).and_return(nil)
+      allow(SolidQueueAutoscaler).to receive(:current_workers).and_return(0)
 
       status = described_class.status
 

@@ -1,7 +1,7 @@
 # Solid Queue Heroku Autoscaler
 
-[![CI](https://github.com/reillyse/solid_queue_heroku_autoscaler/actions/workflows/ci.yml/badge.svg)](https://github.com/reillyse/solid_queue_heroku_autoscaler/actions/workflows/ci.yml)
-[![Gem Version](https://badge.fury.io/rb/solid_queue_heroku_autoscaler.svg)](https://badge.fury.io/rb/solid_queue_heroku_autoscaler)
+[![CI](https://github.com/reillyse/solid_queue_autoscaler/actions/workflows/ci.yml/badge.svg)](https://github.com/reillyse/solid_queue_autoscaler/actions/workflows/ci.yml)
+[![Gem Version](https://badge.fury.io/rb/solid_queue_autoscaler.svg)](https://badge.fury.io/rb/solid_queue_autoscaler)
 
 A control plane for [Solid Queue](https://github.com/rails/solid_queue) that automatically scales worker processes based on queue metrics. Supports both **Heroku** and **Kubernetes** deployments.
 
@@ -21,7 +21,7 @@ A control plane for [Solid Queue](https://github.com/rails/solid_queue) that aut
 Add to your Gemfile:
 
 ```ruby
-gem 'solid_queue_heroku_autoscaler'
+gem 'solid_queue_autoscaler'
 ```
 
 Then run:
@@ -35,7 +35,7 @@ bundle install
 For persistent cooldown tracking that survives process restarts:
 
 ```bash
-rails generate solid_queue_heroku_autoscaler:migration
+rails generate solid_queue_autoscaler:migration
 rails db:migrate
 ```
 
@@ -46,7 +46,7 @@ This creates a `solid_queue_autoscaler_state` table to store cooldown timestamps
 For a web UI to monitor autoscaler events and status:
 
 ```bash
-rails generate solid_queue_heroku_autoscaler:dashboard
+rails generate solid_queue_autoscaler:dashboard
 rails db:migrate
 ```
 
@@ -55,11 +55,11 @@ Then mount the dashboard in `config/routes.rb`:
 ```ruby
 # With authentication (recommended)
 authenticate :user, ->(u) { u.admin? } do
-  mount SolidQueueHerokuAutoscaler::Dashboard::Engine => "/autoscaler"
+  mount SolidQueueAutoscaler::Dashboard::Engine => "/autoscaler"
 end
 
 # Or without authentication
-mount SolidQueueHerokuAutoscaler::Dashboard::Engine => "/autoscaler"
+mount SolidQueueAutoscaler::Dashboard::Engine => "/autoscaler"
 ```
 
 ## Quick Start
@@ -69,7 +69,7 @@ mount SolidQueueHerokuAutoscaler::Dashboard::Engine => "/autoscaler"
 Create an initializer at `config/initializers/solid_queue_autoscaler.rb`:
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   # Platform: Heroku
   config.adapter = :heroku
   config.heroku_api_key = ENV['HEROKU_API_KEY']
@@ -94,7 +94,7 @@ Scale different worker types independently with named configurations:
 
 ```ruby
 # Critical jobs worker - fast response, dedicated queue
-SolidQueueHerokuAutoscaler.configure(:critical_worker) do |config|
+SolidQueueAutoscaler.configure(:critical_worker) do |config|
   config.adapter = :heroku
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
@@ -112,7 +112,7 @@ SolidQueueHerokuAutoscaler.configure(:critical_worker) do |config|
 end
 
 # Default worker - handles standard queues
-SolidQueueHerokuAutoscaler.configure(:default_worker) do |config|
+SolidQueueAutoscaler.configure(:default_worker) do |config|
   config.adapter = :heroku
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
@@ -130,7 +130,7 @@ SolidQueueHerokuAutoscaler.configure(:default_worker) do |config|
 end
 
 # Batch processing worker - handles long-running jobs
-SolidQueueHerokuAutoscaler.configure(:batch_worker) do |config|
+SolidQueueAutoscaler.configure(:batch_worker) do |config|
   config.adapter = :heroku
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
@@ -151,7 +151,7 @@ end
 ### Heroku Adapter (Default)
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.adapter = :heroku
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
@@ -168,7 +168,7 @@ heroku authorizations:create -d "Solid Queue Autoscaler"
 ### Kubernetes Adapter
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.adapter = :kubernetes
   config.kubernetes_namespace = ENV.fetch('KUBERNETES_NAMESPACE', 'default')
   config.kubernetes_deployment = 'solid-queue-worker'
@@ -264,26 +264,26 @@ Add to your `config/recurring.yml`:
 ```yaml
 # Single worker configuration
 autoscaler:
-  class: SolidQueueHerokuAutoscaler::AutoscaleJob
+  class: SolidQueueAutoscaler::AutoscaleJob
   queue: autoscaler
   schedule: every 30 seconds
 
 # Or for multi-worker: scale all workers
 autoscaler_all:
-  class: SolidQueueHerokuAutoscaler::AutoscaleJob
+  class: SolidQueueAutoscaler::AutoscaleJob
   queue: autoscaler
   schedule: every 30 seconds
   args: [:all]
 
 # Or scale specific worker types on different schedules
 autoscaler_critical:
-  class: SolidQueueHerokuAutoscaler::AutoscaleJob
+  class: SolidQueueAutoscaler::AutoscaleJob
   queue: autoscaler
   schedule: every 15 seconds
   args: [:critical_worker]
 
 autoscaler_default:
-  class: SolidQueueHerokuAutoscaler::AutoscaleJob
+  class: SolidQueueAutoscaler::AutoscaleJob
   queue: autoscaler
   schedule: every 60 seconds
   args: [:default_worker]
@@ -324,29 +324,29 @@ bundle exec rake solid_queue_autoscaler:reset_cooldown
 
 ```ruby
 # Scale the default worker
-result = SolidQueueHerokuAutoscaler.scale!
+result = SolidQueueAutoscaler.scale!
 
 # Scale a specific worker type
-result = SolidQueueHerokuAutoscaler.scale!(:critical_worker)
+result = SolidQueueAutoscaler.scale!(:critical_worker)
 
 # Scale all configured workers
-results = SolidQueueHerokuAutoscaler.scale_all!
+results = SolidQueueAutoscaler.scale_all!
 
 # Get metrics for a specific worker
-metrics = SolidQueueHerokuAutoscaler.metrics(:critical_worker)
+metrics = SolidQueueAutoscaler.metrics(:critical_worker)
 puts "Queue depth: #{metrics.queue_depth}"
 puts "Latency: #{metrics.oldest_job_age_seconds}s"
 
 # Get current worker count
-workers = SolidQueueHerokuAutoscaler.current_workers(:default_worker)
+workers = SolidQueueAutoscaler.current_workers(:default_worker)
 puts "Current workers: #{workers}"
 
 # List all registered workers
-SolidQueueHerokuAutoscaler.registered_workers
+SolidQueueAutoscaler.registered_workers
 # => [:critical_worker, :default_worker, :batch_worker]
 
 # Get configuration for a specific worker
-config = SolidQueueHerokuAutoscaler.config(:critical_worker)
+config = SolidQueueAutoscaler.config(:critical_worker)
 ```
 
 ## How It Works
@@ -430,7 +430,7 @@ Cooldowns are tracked per-worker type, so scaling one worker doesn't block scali
 Test the autoscaler without making actual changes:
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.dry_run = true
   # ... other config
 end
@@ -454,7 +454,7 @@ The optional dashboard provides a web UI for monitoring the autoscaler:
 1. Generate the dashboard migration:
 
 ```bash
-rails generate solid_queue_heroku_autoscaler:dashboard
+rails generate solid_queue_autoscaler:dashboard
 rails db:migrate
 ```
 
@@ -462,7 +462,7 @@ rails db:migrate
 
 ```ruby
 authenticate :user, ->(u) { u.admin? } do
-  mount SolidQueueHerokuAutoscaler::Dashboard::Engine => "/autoscaler"
+  mount SolidQueueAutoscaler::Dashboard::Engine => "/autoscaler"
 end
 ```
 
@@ -473,7 +473,7 @@ end
 By default, all scaling events are recorded to the database. Configure in your initializer:
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   # Record scale_up, scale_down, skipped, and error events (default: true)
   config.record_events = true
   
@@ -547,7 +547,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and contribution gu
 
 ## Links
 
-- [GitHub Repository](https://github.com/reillyse/solid_queue_heroku_autoscaler)
-- [RubyGems](https://rubygems.org/gems/solid_queue_heroku_autoscaler)
+- [GitHub Repository](https://github.com/reillyse/solid_queue_autoscaler)
+- [RubyGems](https://rubygems.org/gems/solid_queue_autoscaler)
 - [Changelog](CHANGELOG.md)
 

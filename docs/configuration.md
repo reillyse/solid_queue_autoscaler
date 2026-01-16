@@ -9,7 +9,7 @@ The Solid Queue Heroku Autoscaler is configured via a Rails initializer. All set
 Create an initializer at `config/initializers/solid_queue_autoscaler.rb`:
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   # Required: Heroku credentials
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
@@ -21,7 +21,7 @@ end
 The gem includes a Rails generator to create the initializer:
 
 ```bash
-rails generate solid_queue_heroku_autoscaler:install
+rails generate solid_queue_autoscaler:install
 ```
 
 This creates a fully-commented initializer with all available options.
@@ -54,7 +54,7 @@ For Heroku pipelines or CI, you can use the `HEROKU_API_KEY` environment variabl
 ## Complete Configuration Reference
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   # ============================================
   # REQUIRED: Heroku Settings
   # ============================================
@@ -197,7 +197,7 @@ SolidQueueHerokuAutoscaler.configure do |config|
   config.logger = Rails.logger
   
   # Persist cooldowns to database (survives dyno restarts)
-  # Requires migration: rails generate solid_queue_heroku_autoscaler:migration
+  # Requires migration: rails generate solid_queue_autoscaler:migration
   # Default: true
   config.persist_cooldowns = true
   
@@ -228,7 +228,7 @@ SolidQueueHerokuAutoscaler.configure do |config|
   
   # Adapter class for scaling (default: Heroku)
   # See docs/adapters.md for creating custom adapters
-  # config.adapter_class = SolidQueueHerokuAutoscaler::Adapters::Heroku
+  # config.adapter_class = SolidQueueAutoscaler::Adapters::Heroku
   
   # Or set a pre-configured adapter instance
   # config.adapter = MyCustomAdapter.new(config: config)
@@ -242,7 +242,7 @@ end
 The fixed strategy adds or removes a constant number of workers per scaling event. This is the simplest and most predictable approach.
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.scaling_strategy = :fixed
   config.scale_up_increment = 1    # Add 1 worker when scaling up
   config.scale_down_decrement = 1  # Remove 1 worker when scaling down
@@ -260,7 +260,7 @@ end
 The proportional strategy calculates the number of workers to add based on how far over the thresholds your metrics are. This allows faster response to large load spikes.
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.scaling_strategy = :proportional
   
   # Base thresholds (same as fixed)
@@ -313,7 +313,7 @@ end
 
 ```ruby
 # config/initializers/solid_queue_autoscaler.rb
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
   
@@ -341,7 +341,7 @@ end
 
 ```ruby
 # config/initializers/solid_queue_autoscaler.rb
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
   
@@ -364,7 +364,7 @@ end
 
 ```ruby
 # config/initializers/solid_queue_autoscaler.rb
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
   
@@ -385,7 +385,7 @@ end
 
 ```ruby
 # config/initializers/solid_queue_autoscaler.rb
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
   
@@ -402,7 +402,7 @@ end
 
 ```ruby
 # config/initializers/solid_queue_autoscaler.rb
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
   
@@ -434,7 +434,7 @@ The autoscaler runs as a Solid Queue job. Configure it with a dedicated queue:
 ```yaml
 # config/recurring.yml
 autoscaler:
-  class: SolidQueueHerokuAutoscaler::AutoscaleJob
+  class: SolidQueueAutoscaler::AutoscaleJob
   queue: autoscaler
   schedule: every 30 seconds
 ```
@@ -470,11 +470,11 @@ workers:
 The configuration is validated when you call `configure`:
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.min_workers = 10
   config.max_workers = 5  # Error! min > max
 end
-# => SolidQueueHerokuAutoscaler::ConfigurationError: 
+# => SolidQueueAutoscaler::ConfigurationError: 
 #    min_workers cannot exceed max_workers
 ```
 
@@ -504,21 +504,21 @@ Configuration is read at startup. To change settings at runtime:
 
 ```ruby
 # Reset and reconfigure (not recommended in production)
-SolidQueueHerokuAutoscaler.reset_configuration!
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.reset_configuration!
+SolidQueueAutoscaler.configure do |config|
   # new settings
 end
 
 # Better: use enable/disable for quick changes
-SolidQueueHerokuAutoscaler.config.enabled = false  # Pause autoscaling
-SolidQueueHerokuAutoscaler.config.dry_run = true   # Enter dry-run mode
+SolidQueueAutoscaler.config.enabled = false  # Pause autoscaling
+SolidQueueAutoscaler.config.dry_run = true   # Enter dry-run mode
 ```
 
 ## Debugging Configuration
 
 ```ruby
 # In Rails console
-config = SolidQueueHerokuAutoscaler.config
+config = SolidQueueAutoscaler.config
 
 # Check current settings
 puts config.max_workers
@@ -531,11 +531,11 @@ puts config.effective_scale_up_cooldown
 puts config.effective_scale_down_cooldown
 
 # Verify Heroku connection
-workers = SolidQueueHerokuAutoscaler.current_workers
+workers = SolidQueueAutoscaler.current_workers
 puts "Current workers: #{workers}"
 
 # Check metrics
-metrics = SolidQueueHerokuAutoscaler.metrics
+metrics = SolidQueueAutoscaler.metrics
 puts metrics.to_h
 ```
 

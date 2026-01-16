@@ -7,8 +7,8 @@ Thank you for your interest in contributing! This document outlines the process 
 1. Fork the repository
 2. Clone your fork:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/solid_queue_heroku_autoscaler.git
-   cd solid_queue_heroku_autoscaler
+   git clone https://github.com/YOUR_USERNAME/solid_queue_autoscaler.git
+   cd solid_queue_autoscaler
    ```
 3. Install dependencies:
    ```bash
@@ -72,7 +72,7 @@ Once approved and all checks pass, a maintainer will merge your PR.
 
 Releases are automated via GitHub Actions. To trigger a new release:
 
-1. **Bump the version** in `lib/solid_queue_heroku_autoscaler/version.rb`
+1. **Bump the version** in `lib/solid_queue_autoscaler/version.rb`
 2. **Update CHANGELOG.md** with the new version and changes
 3. Create a PR with these changes
 4. Once merged, the gem is automatically:

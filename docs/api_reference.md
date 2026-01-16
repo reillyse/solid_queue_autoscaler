@@ -2,7 +2,7 @@
 
 ## Table of Contents
 
-- [SolidQueueHerokuAutoscaler](#solidqueueherokuautoscaler)
+- [SolidQueueAutoscaler](#solidqueueherokuautoscaler)
 - [Configuration](#configuration)
 - [Adapters](#adapters)
 - [Scaler](#scaler)
@@ -12,7 +12,7 @@
 - [AutoscaleJob](#autoscalejob)
 - [Error Classes](#error-classes)
 
-## SolidQueueHerokuAutoscaler
+## SolidQueueAutoscaler
 
 The main module providing the public API.
 
@@ -21,7 +21,7 @@ The main module providing the public API.
 Configure the autoscaler with a block.
 
 ```ruby
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
   # ... other options
@@ -39,7 +39,7 @@ end
 Access the current configuration.
 
 ```ruby
-config = SolidQueueHerokuAutoscaler.config
+config = SolidQueueAutoscaler.config
 puts config.max_workers  # => 10
 ```
 
@@ -50,7 +50,7 @@ puts config.max_workers  # => 10
 Execute the autoscaler once.
 
 ```ruby
-result = SolidQueueHerokuAutoscaler.scale!
+result = SolidQueueAutoscaler.scale!
 
 if result.success?
   if result.scaled?
@@ -70,7 +70,7 @@ end
 Collect current queue metrics.
 
 ```ruby
-metrics = SolidQueueHerokuAutoscaler.metrics
+metrics = SolidQueueAutoscaler.metrics
 
 puts "Queue depth: #{metrics.queue_depth}"
 puts "Latency: #{metrics.oldest_job_age_seconds}s"
@@ -86,7 +86,7 @@ puts "Queues: #{metrics.queues_breakdown}"
 Get current worker count from Heroku.
 
 ```ruby
-count = SolidQueueHerokuAutoscaler.current_workers
+count = SolidQueueAutoscaler.current_workers
 puts "Currently running: #{count} workers"
 ```
 
@@ -99,7 +99,7 @@ puts "Currently running: #{count} workers"
 Reset configuration to nil (mainly for testing).
 
 ```ruby
-SolidQueueHerokuAutoscaler.reset_configuration!
+SolidQueueAutoscaler.reset_configuration!
 ```
 
 ---
@@ -204,7 +204,7 @@ Configuration object for the autoscaler.
 Validate the configuration.
 
 ```ruby
-config = SolidQueueHerokuAutoscaler::Configuration.new
+config = SolidQueueAutoscaler::Configuration.new
 config.heroku_api_key = 'test'
 config.heroku_app_name = 'my-app'
 config.validate!  # => true
@@ -280,7 +280,7 @@ Base class for all adapters. Subclass this to create custom adapters.
 #### Constructor
 
 ```ruby
-adapter = SolidQueueHerokuAutoscaler::Adapters::Base.new(config: config)
+adapter = SolidQueueAutoscaler::Adapters::Base.new(config: config)
 ```
 
 **Parameters:**
@@ -354,7 +354,7 @@ Heroku adapter using Platform API.
 
 ```ruby
 # Used by default when no adapter is specified
-adapter = SolidQueueHerokuAutoscaler::Adapters::Heroku.new(config: config)
+adapter = SolidQueueAutoscaler::Adapters::Heroku.new(config: config)
 
 adapter.current_workers  # => 3
 adapter.scale(5)         # => 5
@@ -370,12 +370,12 @@ adapter.formation_list   # => [{"type" => "worker", "quantity" => 3, ...}]
 
 ```ruby
 # Get all built-in adapters
-SolidQueueHerokuAutoscaler::Adapters.all
-# => [SolidQueueHerokuAutoscaler::Adapters::Heroku]
+SolidQueueAutoscaler::Adapters.all
+# => [SolidQueueAutoscaler::Adapters::Heroku]
 
 # Find adapter by name
-SolidQueueHerokuAutoscaler::Adapters.find(:heroku)
-# => SolidQueueHerokuAutoscaler::Adapters::Heroku
+SolidQueueAutoscaler::Adapters.find(:heroku)
+# => SolidQueueAutoscaler::Adapters::Heroku
 ```
 
 ### Creating Custom Adapters
@@ -383,7 +383,7 @@ SolidQueueHerokuAutoscaler::Adapters.find(:heroku)
 See the [Adapters Guide](adapters.md) for detailed instructions on creating custom adapters.
 
 ```ruby
-class MyAdapter < SolidQueueHerokuAutoscaler::Adapters::Base
+class MyAdapter < SolidQueueAutoscaler::Adapters::Base
   def current_workers
     # Implementation
   end
@@ -398,7 +398,7 @@ class MyAdapter < SolidQueueHerokuAutoscaler::Adapters::Base
 end
 
 # Use it
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.adapter_class = MyAdapter
 end
 ```
@@ -412,7 +412,7 @@ Main orchestrator that coordinates metrics collection, decision making, and scal
 ### Constructor
 
 ```ruby
-scaler = SolidQueueHerokuAutoscaler::Scaler.new(config: nil)
+scaler = SolidQueueAutoscaler::Scaler.new(config: nil)
 ```
 
 **Parameters:**
@@ -484,7 +484,7 @@ result.executed_at  # => Time
 Reset cooldown timestamps (for testing).
 
 ```ruby
-SolidQueueHerokuAutoscaler::Scaler.reset_cooldowns!
+SolidQueueAutoscaler::Scaler.reset_cooldowns!
 ```
 
 ---
@@ -496,7 +496,7 @@ Collects queue metrics from Solid Queue PostgreSQL tables.
 ### Constructor
 
 ```ruby
-metrics = SolidQueueHerokuAutoscaler::Metrics.new(config: nil)
+metrics = SolidQueueAutoscaler::Metrics.new(config: nil)
 ```
 
 **Parameters:**
@@ -561,7 +561,7 @@ Determines scaling decisions based on metrics and configuration.
 ### Constructor
 
 ```ruby
-engine = SolidQueueHerokuAutoscaler::DecisionEngine.new(config: nil)
+engine = SolidQueueAutoscaler::DecisionEngine.new(config: nil)
 ```
 
 **Parameters:**
@@ -619,7 +619,7 @@ Wrapper for Heroku Platform API.
 ### Constructor
 
 ```ruby
-client = SolidQueueHerokuAutoscaler::HerokuClient.new(config: nil)
+client = SolidQueueAutoscaler::HerokuClient.new(config: nil)
 ```
 
 **Parameters:**
@@ -679,7 +679,7 @@ PostgreSQL advisory lock wrapper for singleton execution.
 ### Constructor
 
 ```ruby
-lock = SolidQueueHerokuAutoscaler::AdvisoryLock.new(
+lock = SolidQueueAutoscaler::AdvisoryLock.new(
   lock_key: 'custom_key',
   timeout: 60
 )
@@ -765,19 +765,19 @@ ActiveJob for running autoscaler as a recurring task.
 ```yaml
 # config/recurring.yml
 autoscaler:
-  class: SolidQueueHerokuAutoscaler::AutoscaleJob
+  class: SolidQueueAutoscaler::AutoscaleJob
   queue: autoscaler
   schedule: every 30 seconds
 ```
 
 ```ruby
 # Enqueue manually
-SolidQueueHerokuAutoscaler::AutoscaleJob.perform_later
+SolidQueueAutoscaler::AutoscaleJob.perform_later
 ```
 
 ### Behavior
 
-- Calls `SolidQueueHerokuAutoscaler.scale!`
+- Calls `SolidQueueAutoscaler.scale!`
 - Logs success/failure/skip
 - Discards jobs that fail due to `ConfigurationError` (won't retry)
 - Re-raises other errors for retry
@@ -786,38 +786,38 @@ SolidQueueHerokuAutoscaler::AutoscaleJob.perform_later
 
 ## Error Classes
 
-### SolidQueueHerokuAutoscaler::Error
+### SolidQueueAutoscaler::Error
 
 Base error class.
 
 ```ruby
-rescue SolidQueueHerokuAutoscaler::Error => e
+rescue SolidQueueAutoscaler::Error => e
   # Catches all gem errors
 end
 ```
 
-### SolidQueueHerokuAutoscaler::ConfigurationError
+### SolidQueueAutoscaler::ConfigurationError
 
 Raised when configuration is invalid.
 
 ```ruby
 begin
-  SolidQueueHerokuAutoscaler.configure do |config|
+  SolidQueueAutoscaler.configure do |config|
     config.heroku_api_key = nil
   end
-rescue SolidQueueHerokuAutoscaler::ConfigurationError => e
+rescue SolidQueueAutoscaler::ConfigurationError => e
   puts e.message  # => "heroku_api_key is required"
 end
 ```
 
-### SolidQueueHerokuAutoscaler::HerokuAPIError
+### SolidQueueAutoscaler::HerokuAPIError
 
 Raised when Heroku API calls fail.
 
 ```ruby
 begin
   client.scale(5)
-rescue SolidQueueHerokuAutoscaler::HerokuAPIError => e
+rescue SolidQueueAutoscaler::HerokuAPIError => e
   puts e.message
   puts e.status_code    # => 429
   puts e.response_body  # => "Rate limit exceeded"
@@ -828,34 +828,34 @@ end
 - `status_code` (Integer, nil): HTTP status code
 - `response_body` (String, nil): Response body
 
-### SolidQueueHerokuAutoscaler::MetricsError
+### SolidQueueAutoscaler::MetricsError
 
 Raised when metrics collection fails.
 
 ```ruby
-rescue SolidQueueHerokuAutoscaler::MetricsError => e
+rescue SolidQueueAutoscaler::MetricsError => e
   puts "Failed to collect metrics: #{e.message}"
 end
 ```
 
-### SolidQueueHerokuAutoscaler::LockError
+### SolidQueueAutoscaler::LockError
 
 Raised when advisory lock operations fail.
 
 ```ruby
 begin
   lock.acquire!
-rescue SolidQueueHerokuAutoscaler::LockError => e
+rescue SolidQueueAutoscaler::LockError => e
   puts "Another instance is running"
 end
 ```
 
-### SolidQueueHerokuAutoscaler::CooldownActiveError
+### SolidQueueAutoscaler::CooldownActiveError
 
 Raised when cooldown is active (informational).
 
 ```ruby
-rescue SolidQueueHerokuAutoscaler::CooldownActiveError => e
+rescue SolidQueueAutoscaler::CooldownActiveError => e
   puts e.remaining_seconds  # => 45.3
   puts e.message  # => "Cooldown active, 45s remaining"
 end

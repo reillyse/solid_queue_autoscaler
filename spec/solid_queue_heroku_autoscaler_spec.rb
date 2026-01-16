@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-RSpec.describe SolidQueueHerokuAutoscaler do
+RSpec.describe SolidQueueAutoscaler do
   it 'has a version number' do
-    expect(SolidQueueHerokuAutoscaler::VERSION).not_to be_nil
+    expect(SolidQueueAutoscaler::VERSION).not_to be_nil
   end
 
   describe '.configure' do
@@ -13,7 +13,7 @@ RSpec.describe SolidQueueHerokuAutoscaler do
         config.heroku_app_name = 'test-app'
         yielded_config = config
       end
-      expect(yielded_config).to be_an_instance_of(SolidQueueHerokuAutoscaler::Configuration)
+      expect(yielded_config).to be_an_instance_of(SolidQueueAutoscaler::Configuration)
     end
 
     it 'validates configuration via adapter' do
@@ -21,14 +21,14 @@ RSpec.describe SolidQueueHerokuAutoscaler do
         described_class.configure do |config|
           config.heroku_api_key = nil
         end
-      end.to raise_error(SolidQueueHerokuAutoscaler::ConfigurationError)
+      end.to raise_error(SolidQueueAutoscaler::ConfigurationError)
     end
   end
 
   describe '.config' do
     it 'returns the configuration' do
       configure_autoscaler
-      expect(described_class.config).to be_a(SolidQueueHerokuAutoscaler::Configuration)
+      expect(described_class.config).to be_a(SolidQueueAutoscaler::Configuration)
     end
   end
 
@@ -41,7 +41,7 @@ RSpec.describe SolidQueueHerokuAutoscaler do
   end
 end
 
-RSpec.describe SolidQueueHerokuAutoscaler::Configuration do
+RSpec.describe SolidQueueAutoscaler::Configuration do
   subject(:config) { described_class.new }
 
   describe 'defaults' do
@@ -68,7 +68,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Configuration do
       config.heroku_app_name = 'test-app'
       expect do
         config.validate!
-      end.to raise_error(SolidQueueHerokuAutoscaler::ConfigurationError, /heroku_api_key is required/)
+      end.to raise_error(SolidQueueAutoscaler::ConfigurationError, /heroku_api_key is required/)
     end
 
     it 'raises error when heroku_app_name is missing' do
@@ -76,7 +76,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Configuration do
       config.heroku_app_name = nil
       expect do
         config.validate!
-      end.to raise_error(SolidQueueHerokuAutoscaler::ConfigurationError, /heroku_app_name is required/)
+      end.to raise_error(SolidQueueAutoscaler::ConfigurationError, /heroku_app_name is required/)
     end
 
     it 'raises error when min_workers > max_workers' do
@@ -86,7 +86,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Configuration do
       config.max_workers = 5
       expect do
         config.validate!
-      end.to raise_error(SolidQueueHerokuAutoscaler::ConfigurationError,
+      end.to raise_error(SolidQueueAutoscaler::ConfigurationError,
                          /min_workers cannot exceed max_workers/)
     end
 
@@ -102,7 +102,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Configuration do
       config.table_prefix = 'my_prefix'
       expect do
         config.validate!
-      end.to raise_error(SolidQueueHerokuAutoscaler::ConfigurationError,
+      end.to raise_error(SolidQueueAutoscaler::ConfigurationError,
                          /table_prefix must end with an underscore/)
     end
 
@@ -119,7 +119,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Configuration do
       config.table_prefix = nil
       expect do
         config.validate!
-      end.to raise_error(SolidQueueHerokuAutoscaler::ConfigurationError,
+      end.to raise_error(SolidQueueAutoscaler::ConfigurationError,
                          /table_prefix cannot be nil or empty/)
     end
 
@@ -129,7 +129,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Configuration do
       config.table_prefix = ''
       expect do
         config.validate!
-      end.to raise_error(SolidQueueHerokuAutoscaler::ConfigurationError,
+      end.to raise_error(SolidQueueAutoscaler::ConfigurationError,
                          /table_prefix cannot be nil or empty/)
     end
 
@@ -139,7 +139,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Configuration do
       config.table_prefix = '   '
       expect do
         config.validate!
-      end.to raise_error(SolidQueueHerokuAutoscaler::ConfigurationError,
+      end.to raise_error(SolidQueueAutoscaler::ConfigurationError,
                          /table_prefix cannot be nil or empty/)
     end
   end
@@ -162,11 +162,11 @@ RSpec.describe SolidQueueHerokuAutoscaler::Configuration do
     it 'returns default Heroku adapter' do
       config.heroku_api_key = 'test-key'
       config.heroku_app_name = 'test-app'
-      expect(config.adapter).to be_a(SolidQueueHerokuAutoscaler::Adapters::Heroku)
+      expect(config.adapter).to be_a(SolidQueueAutoscaler::Adapters::Heroku)
     end
 
     it 'can be set to a custom adapter class' do
-      custom_adapter_class = Class.new(SolidQueueHerokuAutoscaler::Adapters::Base) do
+      custom_adapter_class = Class.new(SolidQueueAutoscaler::Adapters::Base) do
         def current_workers = 1
         def scale(qty) = qty
         def configuration_errors = []
@@ -177,9 +177,9 @@ RSpec.describe SolidQueueHerokuAutoscaler::Configuration do
   end
 end
 
-RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Base do
+RSpec.describe SolidQueueAutoscaler::Adapters::Base do
   let(:config) do
-    SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+    SolidQueueAutoscaler::Configuration.new.tap do |c|
       c.heroku_api_key = 'test'
       c.heroku_app_name = 'test'
     end
@@ -218,9 +218,9 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Base do
   end
 end
 
-RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku do
+RSpec.describe SolidQueueAutoscaler::Adapters::Heroku do
   let(:config) do
-    SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+    SolidQueueAutoscaler::Configuration.new.tap do |c|
       c.heroku_api_key = 'test-key'
       c.heroku_app_name = 'test-app'
       c.process_type = 'worker'
@@ -260,7 +260,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Heroku do
   end
 end
 
-RSpec.describe SolidQueueHerokuAutoscaler::DecisionEngine do
+RSpec.describe SolidQueueAutoscaler::DecisionEngine do
   let(:base_config_options) do
     {
       scale_up_queue_depth: 100,
@@ -277,13 +277,13 @@ RSpec.describe SolidQueueHerokuAutoscaler::DecisionEngine do
 
   let(:config) do
     configure_autoscaler(base_config_options)
-    SolidQueueHerokuAutoscaler.config
+    SolidQueueAutoscaler.config
   end
 
   subject(:engine) { described_class.new(config: config) }
 
   let(:idle_metrics) do
-    SolidQueueHerokuAutoscaler::Metrics::Result.new(
+    SolidQueueAutoscaler::Metrics::Result.new(
       queue_depth: 0,
       oldest_job_age_seconds: 0,
       jobs_per_minute: 0,
@@ -297,7 +297,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::DecisionEngine do
   end
 
   let(:high_load_metrics) do
-    SolidQueueHerokuAutoscaler::Metrics::Result.new(
+    SolidQueueAutoscaler::Metrics::Result.new(
       queue_depth: 200,
       oldest_job_age_seconds: 400,
       jobs_per_minute: 50,
@@ -311,7 +311,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::DecisionEngine do
   end
 
   let(:normal_metrics) do
-    SolidQueueHerokuAutoscaler::Metrics::Result.new(
+    SolidQueueAutoscaler::Metrics::Result.new(
       queue_depth: 50,
       oldest_job_age_seconds: 60,
       jobs_per_minute: 20,
@@ -387,11 +387,11 @@ RSpec.describe SolidQueueHerokuAutoscaler::DecisionEngine do
           scale_down_jobs_per_worker: 50
         )
       )
-      SolidQueueHerokuAutoscaler.config
+      SolidQueueAutoscaler.config
     end
 
     let(:very_high_load_metrics) do
-      SolidQueueHerokuAutoscaler::Metrics::Result.new(
+      SolidQueueAutoscaler::Metrics::Result.new(
         queue_depth: 350,              # 250 over threshold (100), should add 5 workers
         oldest_job_age_seconds: 600,   # 300s over threshold, should add 5 workers
         jobs_per_minute: 50,
@@ -405,7 +405,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::DecisionEngine do
     end
 
     let(:moderate_load_metrics) do
-      SolidQueueHerokuAutoscaler::Metrics::Result.new(
+      SolidQueueAutoscaler::Metrics::Result.new(
         queue_depth: 175,              # 75 over threshold, should add 2 workers
         oldest_job_age_seconds: 350,   # 50s over threshold, should add 1 worker
         jobs_per_minute: 30,
@@ -419,7 +419,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::DecisionEngine do
     end
 
     let(:low_load_metrics) do
-      SolidQueueHerokuAutoscaler::Metrics::Result.new(
+      SolidQueueAutoscaler::Metrics::Result.new(
         queue_depth: 5,                # 5 under threshold (10)
         oldest_job_age_seconds: 10,
         jobs_per_minute: 10,
@@ -460,7 +460,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::DecisionEngine do
       end
 
       it 'adds at least scale_up_increment even with small overage' do
-        small_overage_metrics = SolidQueueHerokuAutoscaler::Metrics::Result.new(
+        small_overage_metrics = SolidQueueAutoscaler::Metrics::Result.new(
           queue_depth: 105, # Only 5 jobs over threshold
           oldest_job_age_seconds: 305,
           jobs_per_minute: 10,

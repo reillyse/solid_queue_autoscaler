@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe SolidQueueHerokuAutoscaler::ScaleEvent do
+RSpec.describe SolidQueueAutoscaler::ScaleEvent do
   let(:connection) { double('connection') }
 
   describe 'constants' do

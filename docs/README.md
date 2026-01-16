@@ -27,7 +27,7 @@ Solid Queue Heroku Autoscaler is a control plane for [Solid Queue](https://githu
 
 ```ruby
 # Gemfile
-gem 'solid_queue_heroku_autoscaler'
+gem 'solid_queue_autoscaler'
 ```
 
 ```bash
@@ -38,7 +38,7 @@ bundle install
 
 ```ruby
 # config/initializers/solid_queue_autoscaler.rb
-SolidQueueHerokuAutoscaler.configure do |config|
+SolidQueueAutoscaler.configure do |config|
   config.heroku_api_key = ENV['HEROKU_API_KEY']
   config.heroku_app_name = ENV['HEROKU_APP_NAME']
   config.process_type = 'worker'
@@ -58,7 +58,7 @@ end
 ```yaml
 # config/recurring.yml
 autoscaler:
-  class: SolidQueueHerokuAutoscaler::AutoscaleJob
+  class: SolidQueueAutoscaler::AutoscaleJob
   queue: autoscaler
   schedule: every 30 seconds
 ```
@@ -67,10 +67,10 @@ autoscaler:
 
 ```ruby
 # Manually trigger scaling
-result = SolidQueueHerokuAutoscaler.scale!
+result = SolidQueueAutoscaler.scale!
 
 # Check metrics
-metrics = SolidQueueHerokuAutoscaler.metrics
+metrics = SolidQueueAutoscaler.metrics
 puts "Queue depth: #{metrics.queue_depth}"
 ```
 
@@ -80,7 +80,7 @@ puts "Queue depth: #{metrics.queue_depth}"
 ┌─────────────────────────────────────────────────────────────┐
 │                    Your Rails Application                    │
 ├─────────────────────────────────────────────────────────────┤
-│  SolidQueueHerokuAutoscaler                                  │
+│  SolidQueueAutoscaler                                  │
 │  ├── Scaler (orchestrator)                                   │
 │  │   ├── AdvisoryLock (singleton enforcement)                │
 │  │   ├── Metrics (reads from Solid Queue tables)             │

@@ -34,7 +34,7 @@ jobs:
         id: version_check
         run: |
           # Get current version
-          CURRENT_VERSION=$(ruby -r ./lib/solid_queue_heroku_autoscaler/version.rb -e "puts SolidQueueHerokuAutoscaler::VERSION")
+          CURRENT_VERSION=$(ruby -r ./lib/solid_queue_autoscaler/version.rb -e "puts SolidQueueAutoscaler::VERSION")
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           
           # Check if force release was requested
@@ -45,11 +45,11 @@ jobs:
           fi
           
           # Get previous version (from parent commit)
-          git checkout HEAD~1 -- lib/solid_queue_heroku_autoscaler/version.rb 2>/dev/null || true
-          PREVIOUS_VERSION=$(ruby -r ./lib/solid_queue_heroku_autoscaler/version.rb -e "puts SolidQueueHerokuAutoscaler::VERSION" 2>/dev/null || echo "0.0.0")
+          git checkout HEAD~1 -- lib/solid_queue_autoscaler/version.rb 2>/dev/null || true
+          PREVIOUS_VERSION=$(ruby -r ./lib/solid_queue_autoscaler/version.rb -e "puts SolidQueueAutoscaler::VERSION" 2>/dev/null || echo "0.0.0")
           
           # Restore current version
-          git checkout HEAD -- lib/solid_queue_heroku_autoscaler/version.rb
+          git checkout HEAD -- lib/solid_queue_autoscaler/version.rb
           
           echo "previous_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
           
@@ -67,7 +67,7 @@ jobs:
 
       - name: Build gem
         if: steps.version_check.outputs.version_changed == 'true'
-        run: gem build solid_queue_heroku_autoscaler.gemspec
+        run: gem build solid_queue_autoscaler.gemspec
 
       - name: Publish to RubyGems
         if: steps.version_check.outputs.version_changed == 'true'
@@ -76,7 +76,7 @@ jobs:
           touch $HOME/.gem/credentials
           chmod 0600 $HOME/.gem/credentials
           printf -- "---\n:rubygems_api_key: ${GEM_HOST_API_KEY}\n" > $HOME/.gem/credentials
-          gem push solid_queue_heroku_autoscaler-${{ steps.version_check.outputs.current_version }}.gem
+          gem push solid_queue_autoscaler-${{ steps.version_check.outputs.current_version }}.gem
         env:
           GEM_HOST_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
 
@@ -89,14 +89,14 @@ jobs:
           body: |
             ## Release v${{ steps.version_check.outputs.current_version }}
             
-            See [CHANGELOG.md](https://github.com/reillyse/solid_queue_heroku_autoscaler/blob/main/CHANGELOG.md) for details.
+            See [CHANGELOG.md](https://github.com/reillyse/solid_queue_autoscaler/blob/main/CHANGELOG.md) for details.
             
             ### Installation
             ```ruby
-            gem 'solid_queue_heroku_autoscaler', '~> ${{ steps.version_check.outputs.current_version }}'
+            gem 'solid_queue_autoscaler', '~> ${{ steps.version_check.outputs.current_version }}'
             ```
           files: |
-            solid_queue_heroku_autoscaler-${{ steps.version_check.outputs.current_version }}.gem
+            solid_queue_autoscaler-${{ steps.version_check.outputs.current_version }}.gem
           draft: false
           prerelease: false
         env:

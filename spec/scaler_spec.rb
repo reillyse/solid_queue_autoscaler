@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
+RSpec.describe SolidQueueAutoscaler::Scaler do
   let(:logger) { instance_double(Logger, info: nil, debug: nil, warn: nil, error: nil) }
 
   let(:adapter) do
     instance_double(
-      SolidQueueHerokuAutoscaler::Adapters::Heroku,
+      SolidQueueAutoscaler::Adapters::Heroku,
       current_workers: 2,
       scale: 3,
       name: 'Heroku'
@@ -13,7 +13,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
   end
 
   let(:config) do
-    SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+    SolidQueueAutoscaler::Configuration.new.tap do |c|
       c.heroku_api_key = 'test-api-key'
       c.heroku_app_name = 'test-app'
       c.process_type = 'worker'
@@ -33,10 +33,10 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     end
   end
 
-  let(:lock) { instance_double(SolidQueueHerokuAutoscaler::AdvisoryLock) }
+  let(:lock) { instance_double(SolidQueueAutoscaler::AdvisoryLock) }
 
   let(:metrics_result) do
-    SolidQueueHerokuAutoscaler::Metrics::Result.new(
+    SolidQueueAutoscaler::Metrics::Result.new(
       queue_depth: 50,
       oldest_job_age_seconds: 60.0,
       jobs_per_minute: 100,
@@ -49,15 +49,15 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     )
   end
 
-  let(:metrics_collector) { instance_double(SolidQueueHerokuAutoscaler::Metrics, collect: metrics_result) }
-  let(:decision_engine) { instance_double(SolidQueueHerokuAutoscaler::DecisionEngine) }
+  let(:metrics_collector) { instance_double(SolidQueueAutoscaler::Metrics, collect: metrics_result) }
+  let(:decision_engine) { instance_double(SolidQueueAutoscaler::DecisionEngine) }
 
   subject(:scaler) { described_class.new(config: config) }
 
   before do
-    allow(SolidQueueHerokuAutoscaler::AdvisoryLock).to receive(:new).and_return(lock)
-    allow(SolidQueueHerokuAutoscaler::Metrics).to receive(:new).and_return(metrics_collector)
-    allow(SolidQueueHerokuAutoscaler::DecisionEngine).to receive(:new).and_return(decision_engine)
+    allow(SolidQueueAutoscaler::AdvisoryLock).to receive(:new).and_return(lock)
+    allow(SolidQueueAutoscaler::Metrics).to receive(:new).and_return(metrics_collector)
+    allow(SolidQueueAutoscaler::DecisionEngine).to receive(:new).and_return(decision_engine)
     allow(lock).to receive(:try_lock).and_return(true)
     allow(lock).to receive(:release)
     allow(lock).to receive(:with_lock).and_yield
@@ -65,7 +65,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
   describe 'ScaleResult struct' do
     let(:decision) do
-      SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+      SolidQueueAutoscaler::DecisionEngine::Decision.new(
         action: :scale_up,
         from: 2,
         to: 3,
@@ -109,7 +109,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
       end
 
       it 'returns false when success but decision is no_change' do
-        no_change_decision = SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+        no_change_decision = SolidQueueAutoscaler::DecisionEngine::Decision.new(
           action: :no_change,
           from: 2,
           to: 2,
@@ -189,7 +189,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     context 'when lock is acquired successfully' do
       it 'releases the lock after execution' do
         allow(decision_engine).to receive(:decide).and_return(
-          SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+          SolidQueueAutoscaler::DecisionEngine::Decision.new(
             action: :no_change,
             from: 2,
             to: 2,
@@ -213,7 +213,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
     context 'full scaling workflow - scale up' do
       let(:scale_up_metrics) do
-        SolidQueueHerokuAutoscaler::Metrics::Result.new(
+        SolidQueueAutoscaler::Metrics::Result.new(
           queue_depth: 150,
           oldest_job_age_seconds: 400.0,
           jobs_per_minute: 50,
@@ -227,7 +227,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
       end
 
       let(:scale_up_decision) do
-        SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
           action: :scale_up,
           from: 2,
           to: 3,
@@ -309,7 +309,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
     context 'full scaling workflow - scale down' do
       let(:scale_down_metrics) do
-        SolidQueueHerokuAutoscaler::Metrics::Result.new(
+        SolidQueueAutoscaler::Metrics::Result.new(
           queue_depth: 5,
           oldest_job_age_seconds: 10.0,
           jobs_per_minute: 200,
@@ -323,7 +323,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
       end
 
       let(:scale_down_decision) do
-        SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
           action: :scale_down,
           from: 5,
           to: 4,
@@ -362,7 +362,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
     context 'full scaling workflow - no change' do
       let(:normal_metrics) do
-        SolidQueueHerokuAutoscaler::Metrics::Result.new(
+        SolidQueueAutoscaler::Metrics::Result.new(
           queue_depth: 50,
           oldest_job_age_seconds: 60.0,
           jobs_per_minute: 100,
@@ -376,7 +376,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
       end
 
       let(:no_change_decision) do
-        SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
           action: :no_change,
           from: 3,
           to: 3,
@@ -415,7 +415,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
     context 'cooldown behavior - scale up cooldown active' do
       let(:scale_up_decision) do
-        SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
           action: :scale_up,
           from: 2,
           to: 3,
@@ -461,7 +461,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
     context 'cooldown behavior - scale down cooldown active' do
       let(:scale_down_decision) do
-        SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
           action: :scale_down,
           from: 5,
           to: 4,
@@ -490,7 +490,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
     context 'cooldown behavior - cooldown expired' do
       let(:scale_up_decision) do
-        SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
           action: :scale_up,
           from: 2,
           to: 3,
@@ -525,7 +525,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
     context 'cooldown behavior - separate cooldowns for scale up and scale down' do
       let(:scale_up_decision) do
-        SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
           action: :scale_up,
           from: 2,
           to: 3,
@@ -583,7 +583,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
       before do
         allow(metrics_collector).to receive(:collect).and_return(metrics_result)
         allow(adapter).to receive(:current_workers)
-          .and_raise(SolidQueueHerokuAutoscaler::HerokuAPIError.new('API timeout'))
+          .and_raise(SolidQueueAutoscaler::HerokuAPIError.new('API timeout'))
       end
 
       it 'returns an error result' do
@@ -593,13 +593,13 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
       it 'includes the HerokuAPIError in the result' do
         result = scaler.run
-        expect(result.error).to be_a(SolidQueueHerokuAutoscaler::HerokuAPIError)
+        expect(result.error).to be_a(SolidQueueAutoscaler::HerokuAPIError)
       end
     end
 
     context 'error handling - adapter scale error' do
       let(:scale_up_decision) do
-        SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
           action: :scale_up,
           from: 2,
           to: 3,
@@ -612,7 +612,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
         allow(decision_engine).to receive(:decide).and_return(scale_up_decision)
         allow(adapter).to receive(:current_workers).and_return(2)
         allow(adapter).to receive(:scale)
-          .and_raise(SolidQueueHerokuAutoscaler::HerokuAPIError.new('Rate limited', status_code: 429))
+          .and_raise(SolidQueueAutoscaler::HerokuAPIError.new('Rate limited', status_code: 429))
       end
 
       it 'returns an error result' do
@@ -622,7 +622,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
       it 'includes the error in the result' do
         result = scaler.run
-        expect(result.error).to be_a(SolidQueueHerokuAutoscaler::HerokuAPIError)
+        expect(result.error).to be_a(SolidQueueAutoscaler::HerokuAPIError)
         expect(result.error.status_code).to eq(429)
       end
 
@@ -652,7 +652,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
   describe '#run!' do
     context 'when lock is acquired' do
       let(:no_change_decision) do
-        SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
           action: :no_change,
           from: 2,
           to: 2,
@@ -684,17 +684,17 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     context 'when lock acquisition fails' do
       before do
         allow(lock).to receive(:with_lock)
-          .and_raise(SolidQueueHerokuAutoscaler::LockError.new('Lock timeout'))
+          .and_raise(SolidQueueAutoscaler::LockError.new('Lock timeout'))
       end
 
       it 'raises the lock error' do
-        expect { scaler.run! }.to raise_error(SolidQueueHerokuAutoscaler::LockError, /Lock timeout/)
+        expect { scaler.run! }.to raise_error(SolidQueueAutoscaler::LockError, /Lock timeout/)
       end
     end
 
     context 'when scaling succeeds' do
       let(:scale_up_decision) do
-        SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
           action: :scale_up,
           from: 2,
           to: 3,
@@ -718,7 +718,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
   describe 'logging' do
     let(:scale_up_decision) do
-      SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+      SolidQueueAutoscaler::DecisionEngine::Decision.new(
         action: :scale_up,
         from: 2,
         to: 3,
@@ -727,7 +727,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     end
 
     let(:high_metrics) do
-      SolidQueueHerokuAutoscaler::Metrics::Result.new(
+      SolidQueueAutoscaler::Metrics::Result.new(
         queue_depth: 150,
         oldest_job_age_seconds: 120.0,
         jobs_per_minute: 50,
@@ -796,17 +796,17 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     it 'passes config to metrics collector' do
       # Force scaler instantiation to trigger the receives
       scaler
-      expect(SolidQueueHerokuAutoscaler::Metrics).to have_received(:new).with(config: config)
+      expect(SolidQueueAutoscaler::Metrics).to have_received(:new).with(config: config)
     end
 
     it 'passes config to decision engine' do
       # Force scaler instantiation to trigger the receives
       scaler
-      expect(SolidQueueHerokuAutoscaler::DecisionEngine).to have_received(:new).with(config: config)
+      expect(SolidQueueAutoscaler::DecisionEngine).to have_received(:new).with(config: config)
     end
 
     it 'uses adapter from config' do
-      no_change_decision = SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+      no_change_decision = SolidQueueAutoscaler::DecisionEngine::Decision.new(
         action: :no_change, from: 2, to: 2, reason: 'ok'
       )
       allow(decision_engine).to receive(:decide).and_return(no_change_decision)
@@ -818,7 +818,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     end
 
     it 'passes metrics and current_workers to decision engine' do
-      no_change_decision = SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+      no_change_decision = SolidQueueAutoscaler::DecisionEngine::Decision.new(
         action: :no_change, from: 2, to: 2, reason: 'ok'
       )
       allow(decision_engine).to receive(:decide).and_return(no_change_decision)
@@ -833,7 +833,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     end
 
     it 'passes decision.to to adapter.scale' do
-      scale_up_decision = SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+      scale_up_decision = SolidQueueAutoscaler::DecisionEngine::Decision.new(
         action: :scale_up, from: 2, to: 5, reason: 'high queue'
       )
       allow(decision_engine).to receive(:decide).and_return(scale_up_decision)
@@ -850,13 +850,13 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     # Don't mock DecisionEngine - use the real one
     let(:real_scaler) do
       # Create scaler without mocking DecisionEngine
-      allow(SolidQueueHerokuAutoscaler::DecisionEngine).to receive(:new).and_call_original
+      allow(SolidQueueAutoscaler::DecisionEngine).to receive(:new).and_call_original
       described_class.new(config: config)
     end
 
     context 'scale up scenario' do
       let(:high_queue_metrics) do
-        SolidQueueHerokuAutoscaler::Metrics::Result.new(
+        SolidQueueAutoscaler::Metrics::Result.new(
           queue_depth: 150,
           oldest_job_age_seconds: 60.0,
           jobs_per_minute: 50,
@@ -886,7 +886,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
     context 'scale down scenario' do
       let(:low_queue_metrics) do
-        SolidQueueHerokuAutoscaler::Metrics::Result.new(
+        SolidQueueAutoscaler::Metrics::Result.new(
           queue_depth: 5,
           oldest_job_age_seconds: 10.0,
           jobs_per_minute: 200,
@@ -917,7 +917,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
     context 'at max workers' do
       let(:high_queue_metrics) do
-        SolidQueueHerokuAutoscaler::Metrics::Result.new(
+        SolidQueueAutoscaler::Metrics::Result.new(
           queue_depth: 500,
           oldest_job_age_seconds: 600.0,
           jobs_per_minute: 10,
@@ -946,7 +946,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
     context 'at min workers' do
       let(:idle_metrics) do
-        SolidQueueHerokuAutoscaler::Metrics::Result.new(
+        SolidQueueAutoscaler::Metrics::Result.new(
           queue_depth: 0,
           oldest_job_age_seconds: 0.0,
           jobs_per_minute: 0,
@@ -977,7 +977,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
   describe 'integration with Kubernetes adapter' do
     let(:k8s_adapter) do
       instance_double(
-        SolidQueueHerokuAutoscaler::Adapters::Kubernetes,
+        SolidQueueAutoscaler::Adapters::Kubernetes,
         current_workers: 3,
         scale: 4,
         name: 'Kubernetes'
@@ -985,7 +985,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     end
 
     let(:k8s_config) do
-      SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+      SolidQueueAutoscaler::Configuration.new.tap do |c|
         c.kubernetes_deployment = 'my-worker'
         c.kubernetes_namespace = 'production'
         c.min_workers = 1
@@ -1002,7 +1002,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     let(:k8s_scaler) { described_class.new(config: k8s_config) }
 
     let(:scale_up_decision) do
-      SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+      SolidQueueAutoscaler::DecisionEngine::Decision.new(
         action: :scale_up,
         from: 3,
         to: 4,
@@ -1011,9 +1011,9 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
     end
 
     before do
-      allow(SolidQueueHerokuAutoscaler::AdvisoryLock).to receive(:new).and_return(lock)
-      allow(SolidQueueHerokuAutoscaler::Metrics).to receive(:new).and_return(metrics_collector)
-      allow(SolidQueueHerokuAutoscaler::DecisionEngine).to receive(:new).and_return(decision_engine)
+      allow(SolidQueueAutoscaler::AdvisoryLock).to receive(:new).and_return(lock)
+      allow(SolidQueueAutoscaler::Metrics).to receive(:new).and_return(metrics_collector)
+      allow(SolidQueueAutoscaler::DecisionEngine).to receive(:new).and_return(decision_engine)
       allow(metrics_collector).to receive(:collect).and_return(metrics_result)
       allow(decision_engine).to receive(:decide).and_return(scale_up_decision)
     end
@@ -1032,7 +1032,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
   describe 'multiple consecutive scaling operations' do
     let(:scale_up_decision) do
-      SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+      SolidQueueAutoscaler::DecisionEngine::Decision.new(
         action: :scale_up,
         from: 2,
         to: 3,
@@ -1075,7 +1075,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
   describe 'concurrent scaling protection' do
     it 'only one instance can scale at a time due to advisory lock' do
-      no_change_decision = SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+      no_change_decision = SolidQueueAutoscaler::DecisionEngine::Decision.new(
         action: :no_change, from: 2, to: 2, reason: 'ok'
       )
       allow(decision_engine).to receive(:decide).and_return(no_change_decision)
@@ -1096,7 +1096,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
   describe 'dry run mode' do
     let(:scale_up_decision) do
-      SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+      SolidQueueAutoscaler::DecisionEngine::Decision.new(
         action: :scale_up,
         from: 2,
         to: 3,
@@ -1131,7 +1131,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
 
   describe 'configuration without explicit adapter' do
     let(:config_without_adapter) do
-      SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+      SolidQueueAutoscaler::Configuration.new.tap do |c|
         c.heroku_api_key = 'test-api-key'
         c.heroku_app_name = 'test-app'
         c.min_workers = 1
@@ -1147,13 +1147,13 @@ RSpec.describe SolidQueueHerokuAutoscaler::Scaler do
       described_class.new(config: config_without_adapter)
 
       # The adapter should be a Heroku adapter by default
-      expect(config_without_adapter.adapter).to be_a(SolidQueueHerokuAutoscaler::Adapters::Heroku)
+      expect(config_without_adapter.adapter).to be_a(SolidQueueAutoscaler::Adapters::Heroku)
     end
   end
 
   describe 'result object completeness' do
     let(:scale_up_decision) do
-      SolidQueueHerokuAutoscaler::DecisionEngine::Decision.new(
+      SolidQueueAutoscaler::DecisionEngine::Decision.new(
         action: :scale_up,
         from: 2,
         to: 3,

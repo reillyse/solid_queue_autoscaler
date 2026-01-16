@@ -18,7 +18,7 @@ Metrics/BlockLength:
   Exclude:
     - 'spec/**/*'
     - '*.gemspec'
-    - 'lib/solid_queue_heroku_autoscaler/railtie.rb'
+    - 'lib/solid_queue_autoscaler/railtie.rb'
 
 # Relax method length limits
 Metrics/MethodLength:
@@ -45,7 +45,7 @@ Metrics/ClassLength:
   Max: 200
   Exclude:
     - 'spec/**/*'
-    - 'lib/solid_queue_heroku_autoscaler/scaler.rb' # Event recording adds lines but keeps cohesion
+    - 'lib/solid_queue_autoscaler/scaler.rb' # Event recording adds lines but keeps cohesion
 
 # Relax module length
 Metrics/ModuleLength:

@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Kubernetes do
+RSpec.describe SolidQueueAutoscaler::Adapters::Kubernetes do
   let(:logger) { instance_double(Logger, info: nil, debug: nil, warn: nil, error: nil) }
 
   let(:config) do
-    SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+    SolidQueueAutoscaler::Configuration.new.tap do |c|
       c.kubernetes_deployment = 'my-worker'
       c.kubernetes_namespace = 'production'
       c.kubernetes_context = 'my-cluster'
@@ -118,12 +118,12 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Kubernetes do
 
       it 'raises KubernetesAPIError' do
         expect { adapter.current_workers }
-          .to raise_error(SolidQueueHerokuAutoscaler::KubernetesAPIError, /Failed to get deployment info/)
+          .to raise_error(SolidQueueAutoscaler::KubernetesAPIError, /Failed to get deployment info/)
       end
 
       it 'includes the original error message' do
         expect { adapter.current_workers }
-          .to raise_error(SolidQueueHerokuAutoscaler::KubernetesAPIError, /Connection refused/)
+          .to raise_error(SolidQueueAutoscaler::KubernetesAPIError, /Connection refused/)
       end
     end
 
@@ -135,7 +135,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Kubernetes do
 
       it 'raises KubernetesAPIError' do
         expect { adapter.current_workers }
-          .to raise_error(SolidQueueHerokuAutoscaler::KubernetesAPIError, /not found/)
+          .to raise_error(SolidQueueAutoscaler::KubernetesAPIError, /not found/)
       end
     end
   end
@@ -201,29 +201,29 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Kubernetes do
 
       it 'raises KubernetesAPIError' do
         expect { adapter.scale(5) }
-          .to raise_error(SolidQueueHerokuAutoscaler::KubernetesAPIError, /Failed to scale deployment/)
+          .to raise_error(SolidQueueAutoscaler::KubernetesAPIError, /Failed to scale deployment/)
       end
 
       it 'includes the deployment name in error' do
         expect { adapter.scale(5) }
-          .to raise_error(SolidQueueHerokuAutoscaler::KubernetesAPIError, /my-worker/)
+          .to raise_error(SolidQueueAutoscaler::KubernetesAPIError, /my-worker/)
       end
 
       it 'includes the target quantity in error' do
         expect { adapter.scale(5) }
-          .to raise_error(SolidQueueHerokuAutoscaler::KubernetesAPIError, /5/)
+          .to raise_error(SolidQueueAutoscaler::KubernetesAPIError, /5/)
       end
 
       it 'includes the original error message' do
         expect { adapter.scale(5) }
-          .to raise_error(SolidQueueHerokuAutoscaler::KubernetesAPIError, /Forbidden/)
+          .to raise_error(SolidQueueAutoscaler::KubernetesAPIError, /Forbidden/)
       end
     end
   end
 
   describe 'environment variable fallbacks' do
     let(:config) do
-      SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+      SolidQueueAutoscaler::Configuration.new.tap do |c|
         # Don't set kubernetes_deployment or kubernetes_namespace
         c.dry_run = false
         c.logger = logger
@@ -240,7 +240,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Kubernetes do
 
       it 'uses deployment from environment' do
         # Need fresh config that reads from ENV
-        fresh_config = SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+        fresh_config = SolidQueueAutoscaler::Configuration.new.tap do |c|
           c.dry_run = false
           c.logger = logger
           c.kubernetes_namespace = 'default'
@@ -263,7 +263,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Kubernetes do
       end
 
       it 'uses namespace from environment' do
-        fresh_config = SolidQueueHerokuAutoscaler::Configuration.new.tap do |c|
+        fresh_config = SolidQueueAutoscaler::Configuration.new.tap do |c|
           c.kubernetes_deployment = 'my-worker'
           c.dry_run = false
           c.logger = logger
@@ -450,7 +450,7 @@ RSpec.describe SolidQueueHerokuAutoscaler::Adapters::Kubernetes do
 
   describe 'integration with base class' do
     it 'inherits from Base' do
-      expect(described_class.superclass).to eq(SolidQueueHerokuAutoscaler::Adapters::Base)
+      expect(described_class.superclass).to eq(SolidQueueAutoscaler::Adapters::Base)
     end
 
     it 'has access to config' do
