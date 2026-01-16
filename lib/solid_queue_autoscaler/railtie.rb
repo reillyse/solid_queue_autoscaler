@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
-# Load the dashboard engine when Rails is available
-require_relative 'dashboard/engine'
-
 module SolidQueueAutoscaler
   class Railtie < Rails::Railtie
+    # Load the dashboard engine in an initializer to ensure Rails is fully loaded
+    initializer 'solid_queue_autoscaler.load_dashboard', before: :load_config_initializers do
+      require_relative 'dashboard/engine'
+    end
+
     initializer 'solid_queue_autoscaler.configure' do
       # Configuration happens via initializer, nothing to do here
     end

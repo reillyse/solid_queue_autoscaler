@@ -7,11 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.1] - 2025-01-16
+## [1.0.2] - 2025-01-16
 
 ### Fixed
 - Fixed Dashboard::Engine not loading properly in Rails applications due to load order issues
-- Engine is now loaded from the railtie to ensure Rails is fully initialized first
+- Engine is now loaded via a railtie initializer to ensure Rails is fully initialized first
+- Verified working in real Rails applications
+
+## [1.0.1] - 2025-01-16 [YANKED]
+
+### Fixed
+- Attempted fix for Dashboard::Engine loading (incomplete)
 
 ## [1.0.0] - 2025-01-16
 
