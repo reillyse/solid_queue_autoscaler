@@ -57,3 +57,38 @@ jobs:
       - name: Run RuboCop
         run: bundle exec rubocop --parallel
         continue-on-error: true
+
+  integration:
+    name: Integration Tests (Dummy Apps)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Install Rails dummy app dependencies
+        working-directory: spec/dummy_rails
+        run: bundle install
+
+      - name: Install Sinatra dummy app dependencies
+        working-directory: spec/dummy_sinatra
+        run: bundle install
+
+      - name: Run Rails dummy app tests
+        working-directory: spec/dummy_rails
+        run: bin/rails runner test_autoscaler.rb
+
+      - name: Run Sinatra dummy app tests
+        working-directory: spec/dummy_sinatra
+        run: bundle exec ruby test_autoscaler.rb
