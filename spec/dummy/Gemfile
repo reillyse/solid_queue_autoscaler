@@ -1,0 +1,18 @@
+source "https://rubygems.org"
+
+gem "rails", "~> 8.1.2"
+gem "sqlite3", ">= 2.1"
+gem "puma", ">= 5.0"
+
+# SolidQueue for job processing
+gem "solid_queue"
+
+# Our gem - use the parent directory
+gem "solid_queue_autoscaler", path: "../.."
+
+# ActiveJob is required for our gem
+gem "activejob"
+
+group :development, :test do
+  gem "debug", platforms: %i[ mri windows ], require: "debug/prelude"
+end
