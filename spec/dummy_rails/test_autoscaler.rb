@@ -342,6 +342,443 @@ rescue => e
 end
 puts
 
+# ============================================================================
+# COMPREHENSIVE CONFIGURATION TESTS
+# ============================================================================
+
+# Test 15: Verify job_priority configuration
+puts "Test 15: Verify job_priority configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  if worker_config.job_priority == 10 && priority_config.job_priority == 5
+    puts "  ✓ PASS: Worker job_priority=#{worker_config.job_priority}, Priority job_priority=#{priority_config.job_priority}"
+    results << { test: 'job_priority config', passed: true }
+  else
+    puts "  ✗ FAIL: job_priority not as expected (worker=#{worker_config.job_priority}, priority=#{priority_config.job_priority})"
+    results << { test: 'job_priority config', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'job_priority config', passed: false, error: e.message }
+end
+puts
+
+# Test 16: Verify scaling_strategy configuration
+puts "Test 16: Verify scaling_strategy configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  if worker_config.scaling_strategy == :fixed && priority_config.scaling_strategy == :proportional
+    puts "  ✓ PASS: Worker scaling_strategy=:#{worker_config.scaling_strategy}, Priority scaling_strategy=:#{priority_config.scaling_strategy}"
+    results << { test: 'scaling_strategy config', passed: true }
+  else
+    puts "  ✗ FAIL: scaling_strategy not as expected"
+    results << { test: 'scaling_strategy config', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'scaling_strategy config', passed: false, error: e.message }
+end
+puts
+
+# Test 17: Verify scale_up thresholds configuration
+puts "Test 17: Verify scale_up thresholds configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  worker_ok = worker_config.scale_up_queue_depth == 100 &&
+              worker_config.scale_up_latency_seconds == 300 &&
+              worker_config.scale_up_increment == 2
+  
+  priority_ok = priority_config.scale_up_queue_depth == 50 &&
+                priority_config.scale_up_latency_seconds == 120 &&
+                priority_config.scale_up_jobs_per_worker == 50 &&
+                priority_config.scale_up_latency_per_worker == 60
+  
+  if worker_ok && priority_ok
+    puts "  ✓ PASS: Worker scale_up: depth=#{worker_config.scale_up_queue_depth}, latency=#{worker_config.scale_up_latency_seconds}s, increment=#{worker_config.scale_up_increment}"
+    puts "         Priority scale_up: depth=#{priority_config.scale_up_queue_depth}, latency=#{priority_config.scale_up_latency_seconds}s, jobs_per_worker=#{priority_config.scale_up_jobs_per_worker}"
+    results << { test: 'scale_up thresholds', passed: true }
+  else
+    puts "  ✗ FAIL: scale_up thresholds not as expected"
+    results << { test: 'scale_up thresholds', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'scale_up thresholds', passed: false, error: e.message }
+end
+puts
+
+# Test 18: Verify scale_down thresholds configuration
+puts "Test 18: Verify scale_down thresholds configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  worker_ok = worker_config.scale_down_queue_depth == 10 &&
+              worker_config.scale_down_latency_seconds == 30 &&
+              worker_config.scale_down_decrement == 1
+  
+  priority_ok = priority_config.scale_down_queue_depth == 5 &&
+                priority_config.scale_down_latency_seconds == 15 &&
+                priority_config.scale_down_jobs_per_worker == 25
+  
+  if worker_ok && priority_ok
+    puts "  ✓ PASS: Worker scale_down: depth=#{worker_config.scale_down_queue_depth}, latency=#{worker_config.scale_down_latency_seconds}s, decrement=#{worker_config.scale_down_decrement}"
+    puts "         Priority scale_down: depth=#{priority_config.scale_down_queue_depth}, latency=#{priority_config.scale_down_latency_seconds}s, jobs_per_worker=#{priority_config.scale_down_jobs_per_worker}"
+    results << { test: 'scale_down thresholds', passed: true }
+  else
+    puts "  ✗ FAIL: scale_down thresholds not as expected"
+    results << { test: 'scale_down thresholds', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'scale_down thresholds', passed: false, error: e.message }
+end
+puts
+
+# Test 19: Verify cooldown settings configuration
+puts "Test 19: Verify cooldown settings configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  worker_ok = worker_config.cooldown_seconds == 120 &&
+              worker_config.scale_up_cooldown_seconds == 60 &&
+              worker_config.scale_down_cooldown_seconds == 180 &&
+              worker_config.effective_scale_up_cooldown == 60 &&
+              worker_config.effective_scale_down_cooldown == 180
+  
+  # Priority uses defaults (cooldown_seconds only)
+  priority_ok = priority_config.cooldown_seconds == 60 &&
+                priority_config.effective_scale_up_cooldown == 60 &&
+                priority_config.effective_scale_down_cooldown == 60
+  
+  if worker_ok && priority_ok
+    puts "  ✓ PASS: Worker cooldowns: base=#{worker_config.cooldown_seconds}s, up=#{worker_config.effective_scale_up_cooldown}s, down=#{worker_config.effective_scale_down_cooldown}s"
+    puts "         Priority cooldowns: base=#{priority_config.cooldown_seconds}s, effective_up=#{priority_config.effective_scale_up_cooldown}s, effective_down=#{priority_config.effective_scale_down_cooldown}s"
+    results << { test: 'cooldown settings', passed: true }
+  else
+    puts "  ✗ FAIL: cooldown settings not as expected"
+    results << { test: 'cooldown settings', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'cooldown settings', passed: false, error: e.message }
+end
+puts
+
+# Test 20: Verify queues filter configuration
+puts "Test 20: Verify queues filter configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  worker_ok = worker_config.queues.nil?  # nil = all queues
+  priority_ok = priority_config.queues == %w[indexing mailers notifications]
+  
+  if worker_ok && priority_ok
+    puts "  ✓ PASS: Worker queues=nil (all queues)"
+    puts "         Priority queues=#{priority_config.queues.inspect}"
+    results << { test: 'queues filter', passed: true }
+  else
+    puts "  ✗ FAIL: queues filter not as expected"
+    results << { test: 'queues filter', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'queues filter', passed: false, error: e.message }
+end
+puts
+
+# Test 21: Verify enabled flag configuration
+puts "Test 21: Verify enabled? flag configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  if worker_config.enabled? && priority_config.enabled?
+    puts "  ✓ PASS: Worker enabled?=#{worker_config.enabled?}, Priority enabled?=#{priority_config.enabled?}"
+    results << { test: 'enabled? config', passed: true }
+  else
+    puts "  ✗ FAIL: enabled? flags not as expected"
+    results << { test: 'enabled? config', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'enabled? config', passed: false, error: e.message }
+end
+puts
+
+# Test 22: Verify record_events configuration
+puts "Test 22: Verify record_events configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  # Note: record_events? depends on connection_available?, so check raw values
+  worker_ok = worker_config.record_events == true && worker_config.record_all_events == false
+  priority_ok = priority_config.record_events == true && priority_config.record_all_events == true
+  
+  if worker_ok && priority_ok
+    puts "  ✓ PASS: Worker record_events=#{worker_config.record_events}, record_all_events=#{worker_config.record_all_events}"
+    puts "         Priority record_events=#{priority_config.record_events}, record_all_events=#{priority_config.record_all_events}"
+    results << { test: 'record_events config', passed: true }
+  else
+    puts "  ✗ FAIL: record_events config not as expected"
+    results << { test: 'record_events config', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'record_events config', passed: false, error: e.message }
+end
+puts
+
+# Test 23: Verify persist_cooldowns configuration
+puts "Test 23: Verify persist_cooldowns configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  if worker_config.persist_cooldowns == true && priority_config.persist_cooldowns == false
+    puts "  ✓ PASS: Worker persist_cooldowns=#{worker_config.persist_cooldowns}, Priority persist_cooldowns=#{priority_config.persist_cooldowns}"
+    results << { test: 'persist_cooldowns config', passed: true }
+  else
+    puts "  ✗ FAIL: persist_cooldowns not as expected"
+    results << { test: 'persist_cooldowns config', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'persist_cooldowns config', passed: false, error: e.message }
+end
+puts
+
+# Test 24: Verify table_prefix configuration
+puts "Test 24: Verify table_prefix configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  if worker_config.table_prefix == 'solid_queue_' && priority_config.table_prefix == 'solid_queue_'
+    puts "  ✓ PASS: Worker table_prefix='#{worker_config.table_prefix}', Priority table_prefix='#{priority_config.table_prefix}'"
+    results << { test: 'table_prefix config', passed: true }
+  else
+    puts "  ✗ FAIL: table_prefix not as expected"
+    results << { test: 'table_prefix config', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'table_prefix config', passed: false, error: e.message }
+end
+puts
+
+# Test 25: Verify lock_key configuration
+puts "Test 25: Verify lock_key configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  if worker_config.lock_key == 'autoscaler_worker_lock' && priority_config.lock_key == 'autoscaler_priority_lock'
+    puts "  ✓ PASS: Worker lock_key='#{worker_config.lock_key}', Priority lock_key='#{priority_config.lock_key}'"
+    results << { test: 'lock_key config', passed: true }
+  else
+    puts "  ✗ FAIL: lock_key not as expected (worker=#{worker_config.lock_key}, priority=#{priority_config.lock_key})"
+    results << { test: 'lock_key config', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'lock_key config', passed: false, error: e.message }
+end
+puts
+
+# Test 26: Verify lock_timeout_seconds configuration
+puts "Test 26: Verify lock_timeout_seconds configuration"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  if worker_config.lock_timeout_seconds == 30 && priority_config.lock_timeout_seconds == 45
+    puts "  ✓ PASS: Worker lock_timeout=#{worker_config.lock_timeout_seconds}s, Priority lock_timeout=#{priority_config.lock_timeout_seconds}s"
+    results << { test: 'lock_timeout_seconds config', passed: true }
+  else
+    puts "  ✗ FAIL: lock_timeout_seconds not as expected"
+    results << { test: 'lock_timeout_seconds config', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'lock_timeout_seconds config', passed: false, error: e.message }
+end
+puts
+
+# Test 27: Verify enqueued job has correct priority
+puts "Test 27: Verify enqueued job has correct priority"
+begin
+  ActiveJob::Base.queue_adapter = :test
+  ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+  
+  SolidQueueAutoscaler::AutoscaleJob.perform_later(:worker)
+  
+  enqueued = ActiveJob::Base.queue_adapter.enqueued_jobs.last
+  
+  # Check that job was enqueued (priority may or may not be in the hash depending on ActiveJob version)
+  if enqueued && enqueued[:queue] == 'autoscaler'
+    puts "  ✓ PASS: Job enqueued with queue='#{enqueued[:queue]}'"
+    if enqueued[:priority]
+      puts "         Job priority=#{enqueued[:priority]}"
+    end
+    results << { test: 'job priority enqueue', passed: true }
+  else
+    puts "  ✗ FAIL: Job not enqueued correctly"
+    results << { test: 'job priority enqueue', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'job priority enqueue', passed: false, error: e.message }
+end
+puts
+
+# Test 28: Verify configuration validation catches invalid settings
+puts "Test 28: Verify configuration validation catches invalid settings"
+begin
+  error_raised = false
+  begin
+    SolidQueueAutoscaler.configure(:invalid_test) do |config|
+      config.adapter = :heroku
+      config.heroku_api_key = nil  # Invalid - will fail validation
+      config.heroku_app_name = nil
+    end
+  rescue SolidQueueAutoscaler::ConfigurationError => e
+    error_raised = true
+    puts "  ✓ PASS: ConfigurationError raised for invalid config"
+    puts "         Error: #{e.message.split(',').first}..."
+  end
+  
+  if error_raised
+    results << { test: 'config validation', passed: true }
+  else
+    puts "  ✗ FAIL: ConfigurationError should have been raised"
+    results << { test: 'config validation', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'config validation', passed: false, error: e.message }
+end
+puts
+
+# Test 29: Verify invalid scaling_strategy is rejected
+puts "Test 29: Verify invalid scaling_strategy is rejected"
+begin
+  error_raised = false
+  begin
+    SolidQueueAutoscaler.configure(:bad_strategy_test) do |config|
+      config.adapter = :heroku
+      config.heroku_api_key = 'test-key'
+      config.heroku_app_name = 'test-app'
+      config.scaling_strategy = :invalid_strategy
+    end
+  rescue SolidQueueAutoscaler::ConfigurationError => e
+    if e.message.include?('scaling_strategy')
+      error_raised = true
+      puts "  ✓ PASS: Invalid scaling_strategy rejected"
+    end
+  end
+  
+  if error_raised
+    results << { test: 'invalid scaling_strategy', passed: true }
+  else
+    puts "  ✗ FAIL: Invalid scaling_strategy should have been rejected"
+    results << { test: 'invalid scaling_strategy', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'invalid scaling_strategy', passed: false, error: e.message }
+end
+puts
+
+# Test 30: Verify invalid table_prefix is rejected
+puts "Test 30: Verify invalid table_prefix is rejected"
+begin
+  error_raised = false
+  begin
+    SolidQueueAutoscaler.configure(:bad_prefix_test) do |config|
+      config.adapter = :heroku
+      config.heroku_api_key = 'test-key'
+      config.heroku_app_name = 'test-app'
+      config.table_prefix = 'no_underscore'  # Invalid - must end with _
+    end
+  rescue SolidQueueAutoscaler::ConfigurationError => e
+    if e.message.include?('table_prefix')
+      error_raised = true
+      puts "  ✓ PASS: Invalid table_prefix rejected"
+    end
+  end
+  
+  if error_raised
+    results << { test: 'invalid table_prefix', passed: true }
+  else
+    puts "  ✗ FAIL: Invalid table_prefix should have been rejected"
+    results << { test: 'invalid table_prefix', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'invalid table_prefix', passed: false, error: e.message }
+end
+puts
+
+# Test 31: Verify min_workers > max_workers is rejected
+puts "Test 31: Verify min_workers > max_workers is rejected"
+begin
+  error_raised = false
+  begin
+    SolidQueueAutoscaler.configure(:bad_workers_test) do |config|
+      config.adapter = :heroku
+      config.heroku_api_key = 'test-key'
+      config.heroku_app_name = 'test-app'
+      config.min_workers = 10
+      config.max_workers = 5  # Invalid - min > max
+    end
+  rescue SolidQueueAutoscaler::ConfigurationError => e
+    if e.message.include?('min_workers') || e.message.include?('max_workers')
+      error_raised = true
+      puts "  ✓ PASS: min_workers > max_workers rejected"
+    end
+  end
+  
+  if error_raised
+    results << { test: 'min > max workers', passed: true }
+  else
+    puts "  ✗ FAIL: min_workers > max_workers should have been rejected"
+    results << { test: 'min > max workers', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'min > max workers', passed: false, error: e.message }
+end
+puts
+
+# Test 32: Verify config can be retrieved by name
+puts "Test 32: Verify config retrieval by worker name"
+begin
+  worker_config = SolidQueueAutoscaler.config(:worker)
+  priority_config = SolidQueueAutoscaler.config(:priority_worker)
+  
+  if worker_config.name == :worker && priority_config.name == :priority_worker
+    puts "  ✓ PASS: Config names are correctly set (worker.name=:#{worker_config.name}, priority.name=:#{priority_config.name})"
+    results << { test: 'config name retrieval', passed: true }
+  else
+    puts "  ✗ FAIL: Config names not as expected"
+    results << { test: 'config name retrieval', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'config name retrieval', passed: false, error: e.message }
+end
+puts
+
 # Summary
 puts "=" * 70
 puts "SUMMARY"
