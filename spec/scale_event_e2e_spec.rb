@@ -5,7 +5,11 @@
 
 RSpec.describe 'ScaleEvent E2E Recording', type: :integration do
   let(:logger) { instance_double(Logger, info: nil, debug: nil, warn: nil, error: nil) }
-  let(:connection) { double('connection') }
+  let(:connection) do
+    double('connection').tap do |conn|
+      allow(conn).to receive(:quote_table_name) { |name| name }
+    end
+  end
 
   let(:adapter) do
     instance_double(
@@ -371,7 +375,11 @@ RSpec.describe 'ScaleEvent E2E Recording', type: :integration do
 end
 
 RSpec.describe SolidQueueAutoscaler::ScaleEvent, '.diagnostics' do
-  let(:connection) { double('connection') }
+  let(:connection) do
+    double('connection').tap do |conn|
+      allow(conn).to receive(:quote_table_name) { |name| name }
+    end
+  end
 
   describe 'diagnostic information' do
     before do

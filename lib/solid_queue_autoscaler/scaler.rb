@@ -25,9 +25,13 @@ module SolidQueueAutoscaler
     end
 
     # Per-configuration cooldown tracking for multi-worker support
+    # Thread-safe mutex for cooldown tracking - defined as constant to avoid
+    # race condition where lazy initialization could create multiple mutexes
+    COOLDOWN_MUTEX = Mutex.new
+
     class << self
       def cooldown_mutex
-        @cooldown_mutex ||= Mutex.new
+        COOLDOWN_MUTEX
       end
 
       def cooldowns
@@ -158,12 +162,17 @@ module SolidQueueAutoscaler
       target = decision.to.clamp(@config.min_workers, @config.max_workers)
       
       if target != decision.to
-        logger.warn(
+        logger&.warn(
           "[Autoscaler] Clamping target from #{decision.to} to #{target} " \
           "(limits: #{@config.min_workers}-#{@config.max_workers})"
         )
-        # Ensure decision reflects the clamped target for logging and events
-        decision.to = target
+        # Create a new decision with the clamped target instead of mutating
+        decision = DecisionEngine::Decision.new(
+          action: decision.action,
+          from: decision.from,
+          to: target,
+          reason: decision.reason
+        )
       end
       
       @adapter.scale(target)
@@ -250,7 +259,7 @@ module SolidQueueAutoscaler
 
     def log_decision(decision, metrics)
       worker_label = @config.name == :default ? '' : "[#{@config.name}] "
-      logger.info(
+      logger&.info(
         "[Autoscaler] #{worker_label}Evaluated: action=#{decision.action} " \
         "workers=#{decision.from}->#{decision.to} " \
         "queue_depth=#{metrics.queue_depth} " \
@@ -262,7 +271,7 @@ module SolidQueueAutoscaler
     def log_scale_action(decision)
       prefix = @config.dry_run? ? '[DRY RUN] ' : ''
       worker_label = @config.name == :default ? '' : "[#{@config.name}] "
-      logger.info(
+      logger&.info(
         "#{prefix}[Autoscaler] #{worker_label}Scaling #{decision.action}: " \
         "#{decision.from} -> #{decision.to} workers (#{decision.reason})"
       )
@@ -281,7 +290,7 @@ module SolidQueueAutoscaler
     end
 
     def skipped_result(reason, decision: nil, metrics: nil)
-      logger.debug("[Autoscaler] Skipped: #{reason}")
+      logger&.debug("[Autoscaler] Skipped: #{reason}")
 
       # Record skipped events
       record_skipped_event(reason, decision, metrics)
@@ -296,7 +305,7 @@ module SolidQueueAutoscaler
     end
 
     def error_result(error)
-      logger.error("[Autoscaler] Error: #{error.class}: #{error.message}")
+      logger&.error("[Autoscaler] Error: #{error.class}: #{error.message}")
 
       # Record error events
       record_error_event(error)
@@ -315,7 +324,7 @@ module SolidQueueAutoscaler
     def record_scale_event(decision, metrics)
       return unless @config.record_events?
 
-      ScaleEvent.create!(
+      ScaleEvent.create(
         {
           worker_name: @config.name.to_s,
           action: decision.action.to_s,
@@ -334,7 +343,7 @@ module SolidQueueAutoscaler
     def record_skipped_event(reason, decision, metrics)
       return unless @config.record_events?
 
-      ScaleEvent.create!(
+      ScaleEvent.create(
         {
           worker_name: @config.name.to_s,
           action: 'skipped',
@@ -353,7 +362,7 @@ module SolidQueueAutoscaler
     def record_error_event(error)
       return unless @config.record_events?
 
-      ScaleEvent.create!(
+      ScaleEvent.create(
         {
           worker_name: @config.name.to_s,
           action: 'error',

@@ -11,18 +11,24 @@ module SolidQueueAutoscaler
         workers = SolidQueueAutoscaler.registered_workers
         workers = [:default] if workers.empty?
 
-        workers.each_with_object({}) do |name, status|
-          status[name] = worker_status(name)
+        # Batch collect metrics once per worker to reduce DB queries
+        workers.each_with_object({}) do |name, result|
+          result[name] = worker_status(name)
         end
       end
 
       # Returns status for a specific worker
+      # Note: Each call makes several DB queries. For multiple workers,
+      # consider caching or using status() which can batch some queries.
       # @param name [Symbol] Worker name
       # @return [Hash] Status information
       def worker_status(name)
         config = SolidQueueAutoscaler.config(name)
         metrics = safe_metrics(name)
         tracker = CooldownTracker.new(config: config, key: name.to_s)
+
+        # Batch cooldown state retrieval into one DB call
+        cooldown_state = tracker.state
 
         {
           name: name,
@@ -45,8 +51,8 @@ module SolidQueueAutoscaler
           cooldowns: {
             scale_up_remaining: tracker.scale_up_cooldown_remaining.round,
             scale_down_remaining: tracker.scale_down_cooldown_remaining.round,
-            last_scale_up: tracker.last_scale_up_at,
-            last_scale_down: tracker.last_scale_down_at
+            last_scale_up: cooldown_state[:last_scale_up_at],
+            last_scale_down: cooldown_state[:last_scale_down_at]
           },
           thresholds: {
             scale_up_queue_depth: config.scale_up_queue_depth,

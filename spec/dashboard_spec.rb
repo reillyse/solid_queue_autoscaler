@@ -92,6 +92,10 @@ RSpec.describe SolidQueueAutoscaler::Dashboard do
       allow(tracker).to receive(:scale_down_cooldown_remaining).and_return(0.0)
       allow(tracker).to receive(:last_scale_up_at).and_return(Time.current - 90.seconds)
       allow(tracker).to receive(:last_scale_down_at).and_return(nil)
+      allow(tracker).to receive(:state).and_return({
+        last_scale_up_at: Time.current - 90.seconds,
+        last_scale_down_at: nil
+      })
       allow(SolidQueueAutoscaler).to receive(:metrics).and_return(metrics_result)
       allow(SolidQueueAutoscaler).to receive(:current_workers).and_return(3)
     end

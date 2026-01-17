@@ -13,16 +13,24 @@ module SolidQueueAutoscaler
       @config = config || SolidQueueAutoscaler.config
       @key = key
       @table_exists = nil
+      @table_exists_checked_at = nil
+    end
+
+    # Resets the cached table_exists? result.
+    # Call this after running migrations to re-check table existence.
+    def reset_table_exists_cache!
+      @table_exists = nil
+      @table_exists_checked_at = nil
     end
 
     def last_scale_up_at
       return nil unless table_exists?
 
       result = connection.select_value(<<~SQL)
-        SELECT last_scale_up_at FROM #{TABLE_NAME}
+        SELECT last_scale_up_at FROM #{quoted_table_name}
         WHERE key = #{connection.quote(key)}
       SQL
-      result ? Time.parse(result.to_s) : nil
+      parse_time_result(result)
     rescue ArgumentError
       nil
     end
@@ -31,10 +39,10 @@ module SolidQueueAutoscaler
       return nil unless table_exists?
 
       result = connection.select_value(<<~SQL)
-        SELECT last_scale_down_at FROM #{TABLE_NAME}
+        SELECT last_scale_down_at FROM #{quoted_table_name}
         WHERE key = #{connection.quote(key)}
       SQL
-      result ? Time.parse(result.to_s) : nil
+      parse_time_result(result)
     rescue ArgumentError
       nil
     end
@@ -57,7 +65,7 @@ module SolidQueueAutoscaler
       return false unless table_exists?
 
       connection.execute(<<~SQL)
-        DELETE FROM #{TABLE_NAME} WHERE key = #{connection.quote(key)}
+        DELETE FROM #{quoted_table_name} WHERE key = #{connection.quote(key)}
       SQL
       true
     end
@@ -92,12 +100,23 @@ module SolidQueueAutoscaler
       [remaining, 0].max
     end
 
+    # Cache TTL for table existence check (5 minutes)
+    TABLE_EXISTS_CACHE_TTL = 300
+
     def table_exists?
-      return @table_exists unless @table_exists.nil?
+      # Return cached result if still valid
+      if !@table_exists.nil? && @table_exists_checked_at
+        cache_age = Time.now - @table_exists_checked_at
+        return @table_exists if cache_age < TABLE_EXISTS_CACHE_TTL
+      end
 
       @table_exists = connection.table_exists?(TABLE_NAME)
+      @table_exists_checked_at = Time.now
+      @table_exists
     rescue StandardError
       @table_exists = false
+      @table_exists_checked_at = Time.now
+      @table_exists
     end
 
     def state
@@ -105,7 +124,7 @@ module SolidQueueAutoscaler
 
       row = connection.select_one(<<~SQL)
         SELECT last_scale_up_at, last_scale_down_at, updated_at
-        FROM #{TABLE_NAME}
+        FROM #{quoted_table_name}
         WHERE key = #{connection.quote(key)}
       SQL
 
@@ -124,6 +143,28 @@ module SolidQueueAutoscaler
       @config.connection
     end
 
+    def quoted_table_name
+      connection.quote_table_name(TABLE_NAME)
+    end
+
+    # Safely parses a time value from the database.
+    # Handles Time, DateTime, String, and nil values.
+    def parse_time_result(value)
+      return nil if value.nil?
+
+      case value
+      when Time, DateTime
+        value.to_time
+      when String
+        Time.parse(value)
+      else
+        # Try to convert to time if possible
+        value.respond_to?(:to_time) ? value.to_time : Time.parse(value.to_s)
+      end
+    rescue ArgumentError, TypeError
+      nil
+    end
+
     def upsert_state(last_scale_up_at: nil, last_scale_down_at: nil)
       now = Time.current
       quoted_key = connection.quote(key)
@@ -132,7 +173,7 @@ module SolidQueueAutoscaler
       if last_scale_up_at
         quoted_time = connection.quote(last_scale_up_at)
         connection.execute(<<~SQL)
-          INSERT INTO #{TABLE_NAME} (key, last_scale_up_at, created_at, updated_at)
+          INSERT INTO #{quoted_table_name} (key, last_scale_up_at, created_at, updated_at)
           VALUES (#{quoted_key}, #{quoted_time}, #{quoted_now}, #{quoted_now})
           ON CONFLICT (key) DO UPDATE SET
             last_scale_up_at = EXCLUDED.last_scale_up_at,
@@ -141,7 +182,7 @@ module SolidQueueAutoscaler
       elsif last_scale_down_at
         quoted_time = connection.quote(last_scale_down_at)
         connection.execute(<<~SQL)
-          INSERT INTO #{TABLE_NAME} (key, last_scale_down_at, created_at, updated_at)
+          INSERT INTO #{quoted_table_name} (key, last_scale_down_at, created_at, updated_at)
           VALUES (#{quoted_key}, #{quoted_time}, #{quoted_now}, #{quoted_now})
           ON CONFLICT (key) DO UPDATE SET
             last_scale_down_at = EXCLUDED.last_scale_down_at,

@@ -175,6 +175,21 @@ module SolidQueueAutoscaler
         errors << 'table_prefix cannot be nil or empty'
       elsif !table_prefix.to_s.end_with?('_')
         errors << 'table_prefix must end with an underscore'
+      elsif !table_prefix.to_s.match?(/\A[a-z0-9_]+\z/)
+        errors << 'table_prefix must contain only lowercase letters, numbers, and underscores'
+      end
+
+      # Validate proportional scaling settings to prevent ZeroDivisionError
+      if scaling_strategy == :proportional
+        if scale_up_jobs_per_worker.nil? || scale_up_jobs_per_worker <= 0
+          errors << 'scale_up_jobs_per_worker must be > 0 for proportional scaling'
+        end
+        if scale_up_latency_per_worker.nil? || scale_up_latency_per_worker <= 0
+          errors << 'scale_up_latency_per_worker must be > 0 for proportional scaling'
+        end
+        if scale_down_jobs_per_worker.nil? || scale_down_jobs_per_worker <= 0
+          errors << 'scale_down_jobs_per_worker must be > 0 for proportional scaling'
+        end
       end
 
       unless VALID_SCALING_STRATEGIES.include?(scaling_strategy)

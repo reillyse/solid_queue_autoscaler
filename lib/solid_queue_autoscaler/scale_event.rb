@@ -167,16 +167,18 @@ module SolidQueueAutoscaler
       end
 
       # Creates a new scale event record.
+      # Returns nil if the table doesn't exist or on error (does not raise).
       # @param attrs [Hash] Event attributes
       # @param connection [ActiveRecord::ConnectionAdapters::AbstractAdapter] Database connection
-      # @return [ScaleEvent] The created event
-      def create!(attrs, connection: nil)
+      # @return [ScaleEvent, nil] The created event, or nil on failure
+      def create(attrs, connection: nil)
         conn = connection || default_connection
         return nil unless table_exists?(conn)
 
         now = Time.current
+        quoted_table = conn.quote_table_name(TABLE_NAME)
         sql = <<~SQL
-          INSERT INTO #{TABLE_NAME}
+          INSERT INTO #{quoted_table}
             (worker_name, action, from_workers, to_workers, reason,
              queue_depth, latency_seconds, metrics_json, dry_run, created_at)
           VALUES
@@ -199,8 +201,16 @@ module SolidQueueAutoscaler
         new(attrs.merge(id: id, created_at: now))
       rescue StandardError => e
         # Log but don't fail if event recording fails
-        Rails.logger.warn("[Autoscaler] Failed to record event: #{e.message}") if defined?(Rails)
+        if defined?(Rails) && Rails.respond_to?(:logger) && Rails.logger
+          Rails.logger.warn("[Autoscaler] Failed to record event: #{e.message}")
+        end
         nil
+      end
+
+      # Alias for backward compatibility
+      # @deprecated Use {#create} instead
+      def create!(attrs, connection: nil)
+        create(attrs, connection: connection)
       end
 
       # Finds recent events.
@@ -213,11 +223,12 @@ module SolidQueueAutoscaler
         return [] unless table_exists?(conn)
 
         filter = worker_name ? "WHERE worker_name = #{conn.quote(worker_name)}" : ''
+        quoted_table = conn.quote_table_name(TABLE_NAME)
 
         sql = <<~SQL
           SELECT id, worker_name, action, from_workers, to_workers, reason,
                  queue_depth, latency_seconds, metrics_json, dry_run, created_at
-          FROM #{TABLE_NAME}
+          FROM #{quoted_table}
           #{filter}
           ORDER BY created_at DESC
           LIMIT #{limit.to_i}
@@ -237,10 +248,11 @@ module SolidQueueAutoscaler
         conn = connection || default_connection
         return [] unless table_exists?(conn)
 
+        quoted_table = conn.quote_table_name(TABLE_NAME)
         sql = <<~SQL
           SELECT id, worker_name, action, from_workers, to_workers, reason,
                  queue_depth, latency_seconds, metrics_json, dry_run, created_at
-          FROM #{TABLE_NAME}
+          FROM #{quoted_table}
           WHERE action = #{conn.quote(action)}
           ORDER BY created_at DESC
           LIMIT #{limit.to_i}
@@ -261,6 +273,7 @@ module SolidQueueAutoscaler
         return default_stats unless table_exists?(conn)
 
         worker_filter = worker_name ? "AND worker_name = #{conn.quote(worker_name)}" : ''
+        quoted_table = conn.quote_table_name(TABLE_NAME)
 
         sql = <<~SQL
           SELECT
@@ -268,7 +281,7 @@ module SolidQueueAutoscaler
             COUNT(*) as count,
             AVG(queue_depth) as avg_queue_depth,
             AVG(latency_seconds) as avg_latency
-          FROM #{TABLE_NAME}
+          FROM #{quoted_table}
           WHERE created_at >= #{conn.quote(since)}
           #{worker_filter}
           GROUP BY action
@@ -289,9 +302,10 @@ module SolidQueueAutoscaler
         return 0 unless table_exists?(conn)
 
         cutoff = Time.current - keep_days.days
+        quoted_table = conn.quote_table_name(TABLE_NAME)
 
         sql = <<~SQL
-          DELETE FROM #{TABLE_NAME}
+          DELETE FROM #{quoted_table}
           WHERE created_at < #{conn.quote(cutoff)}
         SQL
 
@@ -320,8 +334,9 @@ module SolidQueueAutoscaler
         return 0 unless table_exists?(conn)
 
         time_filter = since ? "WHERE created_at >= #{conn.quote(since)}" : ''
+        quoted_table = conn.quote_table_name(TABLE_NAME)
 
-        sql = "SELECT COUNT(*) FROM #{TABLE_NAME} #{time_filter}"
+        sql = "SELECT COUNT(*) FROM #{quoted_table} #{time_filter}"
         conn.select_value(sql).to_i
       rescue StandardError
         0
@@ -367,7 +382,8 @@ module SolidQueueAutoscaler
           result[:recent_events] = count(since: 24.hours.ago, connection: conn)
 
           # Get last event time
-          sql = "SELECT MAX(created_at) FROM #{TABLE_NAME}"
+          quoted_table = conn.quote_table_name(TABLE_NAME)
+          sql = "SELECT MAX(created_at) FROM #{quoted_table}"
           last_at = conn.select_value(sql)
           result[:last_event_at] = last_at ? parse_time(last_at) : nil
         rescue StandardError => e

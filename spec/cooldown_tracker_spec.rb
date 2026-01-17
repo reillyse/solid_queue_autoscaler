@@ -10,7 +10,11 @@ RSpec.describe SolidQueueAutoscaler::CooldownTracker do
     SolidQueueAutoscaler.config
   end
 
-  let(:connection) { double('connection') }
+  let(:connection) do
+    double('connection').tap do |conn|
+      allow(conn).to receive(:quote_table_name) { |name| name }
+    end
+  end
 
   subject(:tracker) { described_class.new(config: config) }
 

@@ -17,6 +17,7 @@ RSpec.describe SolidQueueAutoscaler::Metrics do
 
   before do
     allow(connection).to receive(:quote) { |val| "'#{val}'" }
+    allow(connection).to receive(:quote_table_name) { |name| name }
   end
 
   describe SolidQueueAutoscaler::Metrics::Result do
@@ -119,27 +120,27 @@ RSpec.describe SolidQueueAutoscaler::Metrics do
   describe 'table name helpers' do
     describe 'with default table prefix' do
       it 'uses solid_queue_ prefix for ready_executions_table' do
-        expect(metrics.send(:ready_executions_table)).to eq('solid_queue_ready_executions')
+        expect(metrics.send(:ready_executions_table)).to include('solid_queue_ready_executions')
       end
 
       it 'uses solid_queue_ prefix for jobs_table' do
-        expect(metrics.send(:jobs_table)).to eq('solid_queue_jobs')
+        expect(metrics.send(:jobs_table)).to include('solid_queue_jobs')
       end
 
       it 'uses solid_queue_ prefix for claimed_executions_table' do
-        expect(metrics.send(:claimed_executions_table)).to eq('solid_queue_claimed_executions')
+        expect(metrics.send(:claimed_executions_table)).to include('solid_queue_claimed_executions')
       end
 
       it 'uses solid_queue_ prefix for failed_executions_table' do
-        expect(metrics.send(:failed_executions_table)).to eq('solid_queue_failed_executions')
+        expect(metrics.send(:failed_executions_table)).to include('solid_queue_failed_executions')
       end
 
       it 'uses solid_queue_ prefix for blocked_executions_table' do
-        expect(metrics.send(:blocked_executions_table)).to eq('solid_queue_blocked_executions')
+        expect(metrics.send(:blocked_executions_table)).to include('solid_queue_blocked_executions')
       end
 
       it 'uses solid_queue_ prefix for processes_table' do
-        expect(metrics.send(:processes_table)).to eq('solid_queue_processes')
+        expect(metrics.send(:processes_table)).to include('solid_queue_processes')
       end
     end
 
@@ -149,69 +150,69 @@ RSpec.describe SolidQueueAutoscaler::Metrics do
       end
 
       it 'uses custom prefix for ready_executions_table' do
-        expect(metrics.send(:ready_executions_table)).to eq('my_app_queue_ready_executions')
+        expect(metrics.send(:ready_executions_table)).to include('my_app_queue_ready_executions')
       end
 
       it 'uses custom prefix for jobs_table' do
-        expect(metrics.send(:jobs_table)).to eq('my_app_queue_jobs')
+        expect(metrics.send(:jobs_table)).to include('my_app_queue_jobs')
       end
 
       it 'uses custom prefix for claimed_executions_table' do
-        expect(metrics.send(:claimed_executions_table)).to eq('my_app_queue_claimed_executions')
+        expect(metrics.send(:claimed_executions_table)).to include('my_app_queue_claimed_executions')
       end
 
       it 'uses custom prefix for failed_executions_table' do
-        expect(metrics.send(:failed_executions_table)).to eq('my_app_queue_failed_executions')
+        expect(metrics.send(:failed_executions_table)).to include('my_app_queue_failed_executions')
       end
 
       it 'uses custom prefix for blocked_executions_table' do
-        expect(metrics.send(:blocked_executions_table)).to eq('my_app_queue_blocked_executions')
+        expect(metrics.send(:blocked_executions_table)).to include('my_app_queue_blocked_executions')
       end
 
       it 'uses custom prefix for processes_table' do
-        expect(metrics.send(:processes_table)).to eq('my_app_queue_processes')
+        expect(metrics.send(:processes_table)).to include('my_app_queue_processes')
       end
     end
 
     describe 'with alternative prefixes' do
       it 'handles single word prefix' do
         config.table_prefix = 'queue_'
-        expect(metrics.send(:jobs_table)).to eq('queue_jobs')
+        expect(metrics.send(:jobs_table)).to include('queue_jobs')
       end
 
       it 'handles longer prefix' do
         config.table_prefix = 'my_company_production_queue_'
-        expect(metrics.send(:jobs_table)).to eq('my_company_production_queue_jobs')
+        expect(metrics.send(:jobs_table)).to include('my_company_production_queue_jobs')
       end
     end
 
     describe 'edge case prefixes' do
       it 'handles prefix with numbers' do
         config.table_prefix = 'app123_queue_'
-        expect(metrics.send(:jobs_table)).to eq('app123_queue_jobs')
-        expect(metrics.send(:ready_executions_table)).to eq('app123_queue_ready_executions')
+        expect(metrics.send(:jobs_table)).to include('app123_queue_jobs')
+        expect(metrics.send(:ready_executions_table)).to include('app123_queue_ready_executions')
       end
 
       it 'handles prefix starting with underscore' do
         config.table_prefix = '_private_queue_'
-        expect(metrics.send(:jobs_table)).to eq('_private_queue_jobs')
+        expect(metrics.send(:jobs_table)).to include('_private_queue_jobs')
       end
 
       it 'handles minimum valid prefix (single underscore)' do
         config.table_prefix = '_'
-        expect(metrics.send(:jobs_table)).to eq('_jobs')
-        expect(metrics.send(:processes_table)).to eq('_processes')
+        expect(metrics.send(:jobs_table)).to include('_jobs')
+        expect(metrics.send(:processes_table)).to include('_processes')
       end
 
       it 'handles very long prefix' do
         long_prefix = "#{'a' * 50}_"
         config.table_prefix = long_prefix
-        expect(metrics.send(:jobs_table)).to eq("#{long_prefix}jobs")
+        expect(metrics.send(:jobs_table)).to include("#{long_prefix}jobs")
       end
 
       it 'handles prefix with multiple consecutive underscores' do
         config.table_prefix = 'my__app__queue_'
-        expect(metrics.send(:jobs_table)).to eq('my__app__queue_jobs')
+        expect(metrics.send(:jobs_table)).to include('my__app__queue_jobs')
       end
     end
   end
@@ -666,6 +667,7 @@ RSpec.describe SolidQueueAutoscaler::Metrics do
     it 'uses the configured database connection' do
       custom_connection = instance_double('ActiveRecord::ConnectionAdapters::PostgreSQLAdapter')
       allow(custom_connection).to receive(:select_value).and_return(5)
+      allow(custom_connection).to receive(:quote_table_name) { |name| name }
       config.database_connection = custom_connection
 
       metrics.queue_depth

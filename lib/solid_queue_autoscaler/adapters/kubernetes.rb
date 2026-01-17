@@ -30,9 +30,18 @@ module SolidQueueAutoscaler
       # Kubernetes API path for apps/v1 group
       APPS_API_VERSION = 'apis/apps/v1'
 
+      # Retry configuration for transient network errors
+      MAX_RETRIES = 3
+      RETRY_DELAYS = [1, 2, 4].freeze # Exponential backoff in seconds
+
+      # Default timeout for Kubernetes API calls (seconds)
+      DEFAULT_TIMEOUT = 30
+
       def current_workers
-        deployment = apps_client.get_deployment(deployment_name, namespace)
-        deployment.spec.replicas
+        with_retry do
+          deployment = apps_client.get_deployment(deployment_name, namespace)
+          deployment.spec.replicas
+        end
       rescue StandardError => e
         raise KubernetesAPIError.new("Failed to get deployment info: #{e.message}", original_error: e)
       end
@@ -43,8 +52,10 @@ module SolidQueueAutoscaler
           return quantity
         end
 
-        patch_body = { spec: { replicas: quantity } }
-        apps_client.patch_deployment(deployment_name, patch_body, namespace)
+        with_retry do
+          patch_body = { spec: { replicas: quantity } }
+          apps_client.patch_deployment(deployment_name, patch_body, namespace)
+        end
         quantity
       rescue StandardError => e
         raise KubernetesAPIError.new("Failed to scale deployment #{deployment_name} to #{quantity}: #{e.message}",
@@ -63,6 +74,25 @@ module SolidQueueAutoscaler
       end
 
       private
+
+      # Executes a block with retry logic for transient network errors.
+      # Uses exponential backoff: 1s, 2s, 4s delays between retries.
+      def with_retry
+        attempts = 0
+        begin
+          attempts += 1
+          yield
+        rescue Errno::ECONNREFUSED, Errno::ETIMEDOUT, Errno::ECONNRESET,
+               Net::OpenTimeout, Net::ReadTimeout, SocketError => e
+          if attempts < MAX_RETRIES
+            delay = RETRY_DELAYS[attempts - 1] || RETRY_DELAYS.last
+            logger&.warn("[Autoscaler] Kubernetes API error (attempt #{attempts}/#{MAX_RETRIES}), retrying in #{delay}s: #{e.message}")
+            sleep(delay)
+            retry
+          end
+          raise
+        end
+      end
 
       def apps_client
         @apps_client ||= build_apps_client
@@ -95,7 +125,11 @@ module SolidQueueAutoscaler
           api_endpoint,
           'v1',
           auth_options: auth_options,
-          ssl_options: ssl_options
+          ssl_options: ssl_options,
+          timeouts: {
+            open: DEFAULT_TIMEOUT,
+            read: DEFAULT_TIMEOUT
+          }
         )
       end
 
@@ -112,7 +146,11 @@ module SolidQueueAutoscaler
           api_endpoint,
           'v1',
           ssl_options: context.ssl_options,
-          auth_options: context.auth_options
+          auth_options: context.auth_options,
+          timeouts: {
+            open: DEFAULT_TIMEOUT,
+            read: DEFAULT_TIMEOUT
+          }
         )
       end
 

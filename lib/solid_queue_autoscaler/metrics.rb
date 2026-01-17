@@ -72,7 +72,9 @@ module SolidQueueAutoscaler
         #{queue_filter_clause}
       SQL
       result = connection.select_value(sql)
-      result.to_f
+      # Return 0 if no jobs exist (result is nil) instead of nil.to_f which returns 0.0
+      # This makes the return value more predictable and avoids nil-related issues
+      result.nil? ? 0.0 : result.to_f
     end
 
     def jobs_per_minute
@@ -141,32 +143,33 @@ module SolidQueueAutoscaler
     end
 
     # Table name helpers using configurable prefix
+    # Uses quote_table_name for SQL safety
     def table_prefix
       @config.table_prefix
     end
 
     def ready_executions_table
-      "#{table_prefix}ready_executions"
+      connection.quote_table_name("#{table_prefix}ready_executions")
     end
 
     def jobs_table
-      "#{table_prefix}jobs"
+      connection.quote_table_name("#{table_prefix}jobs")
     end
 
     def claimed_executions_table
-      "#{table_prefix}claimed_executions"
+      connection.quote_table_name("#{table_prefix}claimed_executions")
     end
 
     def failed_executions_table
-      "#{table_prefix}failed_executions"
+      connection.quote_table_name("#{table_prefix}failed_executions")
     end
 
     def blocked_executions_table
-      "#{table_prefix}blocked_executions"
+      connection.quote_table_name("#{table_prefix}blocked_executions")
     end
 
     def processes_table
-      "#{table_prefix}processes"
+      connection.quote_table_name("#{table_prefix}processes")
     end
   end
 end

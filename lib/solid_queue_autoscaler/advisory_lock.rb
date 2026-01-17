@@ -3,6 +3,26 @@
 require 'zlib'
 
 module SolidQueueAutoscaler
+  # PostgreSQL advisory lock wrapper for singleton enforcement.
+  #
+  # IMPORTANT: PgBouncer Compatibility Warning
+  # ==========================================
+  # PostgreSQL advisory locks are connection-scoped (session-level locks).
+  # If you're using PgBouncer in transaction pooling mode, advisory locks
+  # will NOT work correctly because:
+  #   1. Each query may run on a different backend connection
+  #   2. The lock acquired on one connection won't be visible on another
+  #   3. The lock may be "released" when returned to the pool
+  #
+  # Solutions:
+  #   - Use PgBouncer in session pooling mode for the queue database
+  #   - Use a direct connection (bypass PgBouncer) for the autoscaler
+  #   - Disable advisory locks and use external coordination (Redis, etc.)
+  #   - Set config.persist_cooldowns = false and rely on a single process
+  #
+  # If you're seeing multiple autoscalers running simultaneously or
+  # lock acquisition always failing, PgBouncer is likely the cause.
+  #
   class AdvisoryLock
     attr_reader :lock_key, :timeout
 

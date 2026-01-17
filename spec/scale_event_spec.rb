@@ -1,7 +1,11 @@
 # frozen_string_literal: true
 
 RSpec.describe SolidQueueAutoscaler::ScaleEvent do
-  let(:connection) { double('connection') }
+  let(:connection) do
+    double('connection').tap do |conn|
+      allow(conn).to receive(:quote_table_name) { |name| name }
+    end
+  end
 
   describe 'constants' do
     it 'has TABLE_NAME defined' do

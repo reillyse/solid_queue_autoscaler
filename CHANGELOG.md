@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.11] - 2025-01-17
+
+### Fixed
+
+#### Critical Fixes
+- **Thread safety** - Fixed race condition in mutex initialization (`scaler.rb`). Changed from lazy `@cooldown_mutex ||= Mutex.new` to thread-safe class constant `COOLDOWN_MUTEX`
+- **SQL injection prevention** - Added regex validation for `table_prefix` configuration to only allow `[a-z0-9_]+` pattern
+- **PgBouncer documentation** - Added prominent warning in `advisory_lock.rb` about incompatibility with PgBouncer transaction pooling mode
+
+#### High Priority Fixes
+- **CooldownTracker caching** - Added 5-minute TTL for `table_exists?` cache and `reset_table_exists_cache!` method for manual invalidation
+- **ScaleEvent naming** - Renamed `create!` to `create` (non-bang) since it catches exceptions and returns nil. Added `create!` as deprecated alias for backward compatibility
+- **Decision struct mutation** - Fixed mutation of Decision struct when clamping target workers. Now creates a new Decision instead of modifying the existing one
+- **ZeroDivisionError prevention** - Added validation that `scale_up_jobs_per_worker`, `scale_up_latency_per_worker`, and `scale_down_jobs_per_worker` must be > 0 when using proportional scaling
+
+#### Medium Priority Fixes
+- **Retry logic for adapters** - Added exponential backoff retry (3 attempts with 1s/2s/4s delays) for transient network errors in both Heroku and Kubernetes adapters
+- **Time parsing** - Fixed timezone handling in `cooldown_tracker.rb` to properly handle Time, DateTime, and String values
+- **Dashboard query optimization** - Batched cooldown state retrieval in `worker_status` to reduce database queries
+- **Metrics nil handling** - `oldest_job_age_seconds` now returns `0.0` instead of `nil` when no jobs exist
+- **Kubernetes timeout** - Added 30-second timeout configuration to kubeclient API calls
+
+#### Low Priority Fixes
+- **Safe logger calls** - Added safe navigation (`logger&.warn`) throughout to prevent nil errors
+- **SQL table quoting** - Now uses `connection.quote_table_name()` for all table name interpolations
+- **Rails.logger nil check** - Added proper nil check before using `Rails.logger` in `scale_event.rb`
+
 ## [1.0.10] - 2025-01-17
 
 ### Fixed
