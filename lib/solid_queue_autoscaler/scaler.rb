@@ -82,6 +82,7 @@ module SolidQueueAutoscaler
       @metrics_collector = Metrics.new(config: @config)
       @decision_engine = DecisionEngine.new(config: @config)
       @adapter = @config.adapter
+      @cooldown_tracker = nil # Lazy-loaded when persist_cooldowns is enabled
     end
 
     def run
@@ -124,50 +125,127 @@ module SolidQueueAutoscaler
     end
 
     def apply_decision(decision, metrics)
-      @adapter.scale(decision.to)
+      # Re-verify current workers to catch race conditions where another instance
+      # may have scaled while we were making our decision
+      verified_current = @adapter.current_workers
+      
+      if verified_current != decision.from
+        logger.warn(
+          "[Autoscaler] Worker count changed during decision: expected=#{decision.from}, actual=#{verified_current}. " \
+          "Re-evaluating..."
+        )
+        
+        # If we're already at or above max, don't scale up
+        if decision.scale_up? && verified_current >= @config.max_workers
+          return skipped_result(
+            "Aborted scale_up: already at max_workers (#{verified_current} >= #{@config.max_workers})",
+            decision: decision,
+            metrics: metrics
+          )
+        end
+        
+        # If we're already at or below min, don't scale down
+        if decision.scale_down? && verified_current <= @config.min_workers
+          return skipped_result(
+            "Aborted scale_down: already at min_workers (#{verified_current} <= #{@config.min_workers})",
+            decision: decision,
+            metrics: metrics
+          )
+        end
+      end
+
+      # Final safety clamp: never exceed configured limits
+      target = decision.to.clamp(@config.min_workers, @config.max_workers)
+      
+      if target != decision.to
+        logger.warn(
+          "[Autoscaler] Clamping target from #{decision.to} to #{target} " \
+          "(limits: #{@config.min_workers}-#{@config.max_workers})"
+        )
+        # Ensure decision reflects the clamped target for logging and events
+        decision.to = target
+      end
+      
+      @adapter.scale(target)
       record_scale_time(decision)
       record_scale_event(decision, metrics)
-
+      
       log_scale_action(decision)
 
       success_result(decision, metrics)
     end
 
     def cooldown_active?(decision)
-      config_name = @config.name
-      if decision.scale_up?
-        last_scale_up = self.class.last_scale_up_at(config_name)
-        return false unless last_scale_up
-
-        Time.current - last_scale_up < @config.effective_scale_up_cooldown
-      elsif decision.scale_down?
-        last_scale_down = self.class.last_scale_down_at(config_name)
-        return false unless last_scale_down
-
-        Time.current - last_scale_down < @config.effective_scale_down_cooldown
+      if @config.persist_cooldowns && cooldown_tracker.table_exists?
+        # Use database-persisted cooldowns (survives process restarts)
+        if decision.scale_up?
+          cooldown_tracker.cooldown_active_for_scale_up?
+        elsif decision.scale_down?
+          cooldown_tracker.cooldown_active_for_scale_down?
+        else
+          false
+        end
       else
-        false
+        # Fall back to in-memory cooldowns
+        config_name = @config.name
+        if decision.scale_up?
+          last_scale_up = self.class.last_scale_up_at(config_name)
+          return false unless last_scale_up
+
+          Time.current - last_scale_up < @config.effective_scale_up_cooldown
+        elsif decision.scale_down?
+          last_scale_down = self.class.last_scale_down_at(config_name)
+          return false unless last_scale_down
+
+          Time.current - last_scale_down < @config.effective_scale_down_cooldown
+        else
+          false
+        end
       end
     end
 
     def cooldown_remaining(decision)
-      config_name = @config.name
-      if decision.scale_up?
-        elapsed = Time.current - self.class.last_scale_up_at(config_name)
-        @config.effective_scale_up_cooldown - elapsed
+      if @config.persist_cooldowns && cooldown_tracker.table_exists?
+        # Use database-persisted cooldowns
+        if decision.scale_up?
+          cooldown_tracker.scale_up_cooldown_remaining
+        else
+          cooldown_tracker.scale_down_cooldown_remaining
+        end
       else
-        elapsed = Time.current - self.class.last_scale_down_at(config_name)
-        @config.effective_scale_down_cooldown - elapsed
+        # Fall back to in-memory cooldowns
+        config_name = @config.name
+        if decision.scale_up?
+          elapsed = Time.current - self.class.last_scale_up_at(config_name)
+          @config.effective_scale_up_cooldown - elapsed
+        else
+          elapsed = Time.current - self.class.last_scale_down_at(config_name)
+          @config.effective_scale_down_cooldown - elapsed
+        end
       end
     end
 
     def record_scale_time(decision)
+      if @config.persist_cooldowns && cooldown_tracker.table_exists?
+        # Use database-persisted cooldowns
+        if decision.scale_up?
+          cooldown_tracker.record_scale_up!
+        elsif decision.scale_down?
+          cooldown_tracker.record_scale_down!
+        end
+      end
+
+      # Always update in-memory cooldowns as well (for immediate effect within same process)
       config_name = @config.name
       if decision.scale_up?
         self.class.set_last_scale_up_at(config_name, Time.current)
       elsif decision.scale_down?
         self.class.set_last_scale_down_at(config_name, Time.current)
       end
+    end
+
+    def cooldown_tracker
+      @cooldown_tracker ||= CooldownTracker.new(config: @config, key: @config.name.to_s)
     end
 
     def log_decision(decision, metrics)

@@ -236,6 +236,68 @@ MetricsError: relation "solid_queue_ready_executions" does not exist
 
 ---
 
+### Recurring Job Goes to Wrong Queue (default instead of autoscaler)
+
+**Symptoms:**
+```
+[ActiveJob] Enqueued SolidQueueAutoscaler::AutoscaleJob to SolidQueue(default)
+```
+
+**Cause:** The `queue:` setting in `recurring.yml` **overrides** `config.job_queue`. If you omit `queue:` in your recurring.yml, it defaults to `default`.
+
+**Solution:** Always specify `queue:` in your recurring.yml:
+
+```yaml
+# config/recurring.yml
+autoscaler:
+  class: SolidQueueAutoscaler::AutoscaleJob
+  queue: autoscaler  # ⚠️ REQUIRED - must match config.job_queue!
+  schedule: every 30 seconds
+```
+
+---
+
+### Multiple Workers All Enqueue the Same Recurring Job
+
+**Symptoms:**
+```
+worker.1: Enqueued SolidQueueAutoscaler::AutoscaleJob
+worker.2: Enqueued SolidQueueAutoscaler::AutoscaleJob
+worker.3: Enqueued SolidQueueAutoscaler::AutoscaleJob
+worker.4: Enqueued SolidQueueAutoscaler::AutoscaleJob
+```
+
+**Cause:** Each worker dyno is running its own dispatcher process, and each dispatcher processes `recurring.yml` independently.
+
+**Solutions:**
+
+1. **Run a dedicated dispatcher dyno** (recommended for production):
+   ```
+   # Procfile
+   web: bundle exec puma -C config/puma.rb
+   dispatcher: bundle exec rake solid_queue:start SOLID_QUEUE_ONLY_DISPATCH=1
+   worker: bundle exec rake solid_queue:start SOLID_QUEUE_ONLY_WORK=1
+   ```
+
+2. **Or configure workers to not run dispatcher**:
+   ```yaml
+   # config/solid_queue.yml
+   production:
+     dispatchers: []  # No dispatcher on worker dynos
+     workers:
+       - queues: [autoscaler, default, mailers]
+         threads: 5
+   ```
+
+3. **Use a separate config for workers vs dispatcher**:
+   ```
+   # Procfile
+   dispatcher: SOLID_QUEUE_CONFIG=config/solid_queue_dispatcher.yml bundle exec rake solid_queue:start
+   worker: SOLID_QUEUE_CONFIG=config/solid_queue_worker.yml bundle exec rake solid_queue:start
+   ```
+
+---
+
 ### Recurring Job Not Running
 
 **Symptoms:**
@@ -249,7 +311,7 @@ MetricsError: relation "solid_queue_ready_executions" does not exist
    # config/recurring.yml
    autoscaler:
      class: SolidQueueAutoscaler::AutoscaleJob
-     queue: autoscaler
+     queue: autoscaler  # ⚠️ Don't forget this!
      schedule: every 30 seconds
    ```
 

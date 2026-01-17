@@ -743,19 +743,23 @@ Solid Queue processes queues in order, so listing `autoscaler` first ensures tho
 
 ### Running as a Solid Queue Recurring Job (Recommended)
 
+> ⚠️ **IMPORTANT**: The `queue:` setting in `recurring.yml` **overrides** the `config.job_queue` setting!
+> If you omit `queue:` in your recurring.yml, the job will go to the `default` queue, NOT your configured queue.
+> Always ensure your `recurring.yml` queue matches your `config.job_queue` setting.
+
 Add to your `config/recurring.yml`:
 
 ```yaml
 # Single worker configuration
 autoscaler:
   class: SolidQueueAutoscaler::AutoscaleJob
-  queue: autoscaler
+  queue: autoscaler  # ⚠️ REQUIRED: Must match config.job_queue!
   schedule: every 30 seconds
 
 # Or for multi-worker: scale all workers
 autoscaler_all:
   class: SolidQueueAutoscaler::AutoscaleJob
-  queue: autoscaler
+  queue: autoscaler  # ⚠️ REQUIRED!
   schedule: every 30 seconds
   args:
     - :all
@@ -763,18 +767,24 @@ autoscaler_all:
 # Or scale specific worker types on different schedules
 autoscaler_critical:
   class: SolidQueueAutoscaler::AutoscaleJob
-  queue: autoscaler
+  queue: autoscaler  # ⚠️ REQUIRED!
   schedule: every 15 seconds
   args:
     - :critical_worker
 
 autoscaler_default:
   class: SolidQueueAutoscaler::AutoscaleJob
-  queue: autoscaler
+  queue: autoscaler  # ⚠️ REQUIRED!
   schedule: every 60 seconds
   args:
     - :default_worker
 ```
+
+> **Note on multiple worker dynos**: SolidQueue's recurring jobs are processed by the **dispatcher** process,
+> not workers. If each of your worker dynos runs its own dispatcher (which is the default on Heroku),
+> each dyno will try to enqueue the recurring job. To prevent duplicate enqueuing:
+> 1. Run a single dedicated dispatcher dyno, OR
+> 2. Configure workers to NOT run the dispatcher (set `dispatchers: []` in their solid_queue.yml)
 
 ### Running via Rake Tasks
 

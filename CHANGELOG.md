@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.9] - 2025-01-17
+
+### Added
+- **`verify_setup!` method** - New diagnostic method to verify installation is correct
+  - Checks database connection (multi-database aware)
+  - Verifies both autoscaler tables exist with correct columns
+  - Tests adapter connectivity
+  - Returns a `VerificationResult` struct with `ok?`, `tables_exist?`, `cooldowns_shared?` methods
+  - Run `SolidQueueAutoscaler.verify_setup!` in Rails console to diagnose issues
+- **`verify_install!` alias** - Alias for `verify_setup!`
+- **`persist_cooldowns` configuration option** - Control whether cooldowns are stored in database (default: true) or in-memory
+
+### Fixed
+- **Fixed multi-database migration bug** - Migration generator now correctly handles `migrations_paths` as a string (not just array)
+  - Previously, migrations would be placed in a `d/` directory instead of `db/queue_migrate/` due to calling `.first` on a string
+  - Migrations now auto-detect the correct directory from your `database.yml` configuration
+- **Removed unreliable `self.connection` override** from migration templates - This didn't work because `SolidQueue::Record` isn't loaded at migration time
+- **Improved migration generator output** - Clearer instructions for single-database vs multi-database setups
+
+### Changed
+- `verify_setup!` returns `nil` instead of the result object to keep console output clean
+- Migration templates no longer try to override the database connection (rely on Rails native multi-database support instead)
+
 ## [1.0.8] - 2025-01-17
 
 ### Added

@@ -48,6 +48,124 @@ module SolidQueueAutoscaler
     end
 
     class << self
+      # Diagnostic method to help debug why events aren't being saved.
+      # @param config [Configuration, nil] Configuration to check (uses default if nil)
+      # @param connection [ActiveRecord::ConnectionAdapters::AbstractAdapter, nil] Database connection
+      # @return [Hash] Diagnostic information
+      def debug_event_saving(config: nil, connection: nil)
+        config ||= SolidQueueAutoscaler.config rescue nil
+        conn = connection || default_connection rescue nil
+
+        diagnostics = {
+          timestamp: Time.current,
+          config_present: !config.nil?,
+          connection_present: !conn.nil?,
+          record_events_setting: nil,
+          connection_available: false,
+          record_events_effective: false,
+          table_exists: false,
+          can_query: false,
+          can_insert: false,
+          issues: [],
+          connection_class: nil,
+          error: nil
+        }
+
+        # Check config settings
+        if config
+          diagnostics[:record_events_setting] = config.record_events
+          diagnostics[:connection_available] = config.connection_available?
+          diagnostics[:record_events_effective] = config.record_events?
+
+          unless config.record_events
+            diagnostics[:issues] << 'config.record_events is false'
+          end
+
+          unless config.connection_available?
+            diagnostics[:issues] << 'config.connection_available? returned false'
+          end
+        else
+          diagnostics[:issues] << 'No configuration found'
+        end
+
+        # Check connection
+        if conn
+          diagnostics[:connection_class] = conn.class.name
+
+          # Check table exists
+          begin
+            diagnostics[:table_exists] = conn.table_exists?(TABLE_NAME)
+            unless diagnostics[:table_exists]
+              diagnostics[:issues] << "Table '#{TABLE_NAME}' does not exist. Run: rails generate solid_queue_autoscaler:dashboard"
+            end
+          rescue StandardError => e
+            diagnostics[:issues] << "Error checking table existence: #{e.message}"
+          end
+
+          # Check can query
+          if diagnostics[:table_exists]
+            begin
+              conn.select_value("SELECT COUNT(*) FROM #{TABLE_NAME}")
+              diagnostics[:can_query] = true
+            rescue StandardError => e
+              diagnostics[:issues] << "Error querying table: #{e.message}"
+            end
+          end
+
+          # Check can insert (with rollback)
+          if diagnostics[:can_query]
+            begin
+              # Try a test insert that we'll check but not actually commit
+              test_sql = <<~SQL
+                INSERT INTO #{TABLE_NAME}
+                  (worker_name, action, from_workers, to_workers, reason,
+                   queue_depth, latency_seconds, metrics_json, dry_run, created_at)
+                VALUES
+                  (#{conn.quote('_debug_test')},
+                   #{conn.quote('skipped')},
+                   #{conn.quote(0)},
+                   #{conn.quote(0)},
+                   #{conn.quote('debug test - should be deleted')},
+                   #{conn.quote(0)},
+                   #{conn.quote(0.0)},
+                   #{conn.quote(nil)},
+                   #{conn.quote(true)},
+                   #{conn.quote(Time.current)})
+                RETURNING id
+              SQL
+
+              result = conn.execute(test_sql)
+              test_id = result.first&.fetch('id', nil)
+
+              if test_id
+                diagnostics[:can_insert] = true
+                # Clean up test record
+                conn.execute("DELETE FROM #{TABLE_NAME} WHERE id = #{test_id}")
+              else
+                diagnostics[:issues] << 'INSERT succeeded but no id returned'
+              end
+            rescue StandardError => e
+              diagnostics[:issues] << "Error inserting test record: #{e.message}"
+            end
+          end
+        else
+          diagnostics[:issues] << 'No database connection available'
+        end
+
+        # Summary
+        diagnostics[:would_save_events] = diagnostics[:record_events_effective] &&
+                                          diagnostics[:table_exists] &&
+                                          diagnostics[:can_insert]
+
+        diagnostics
+      rescue StandardError => e
+        {
+          timestamp: Time.current,
+          error: "#{e.class}: #{e.message}",
+          issues: ["Unexpected error during diagnostics: #{e.message}"]
+        }
+      end
+
       # Creates a new scale event record.
       # @param attrs [Hash] Event attributes
       # @param connection [ActiveRecord::ConnectionAdapters::AbstractAdapter] Database connection
@@ -207,6 +325,71 @@ module SolidQueueAutoscaler
         conn.select_value(sql).to_i
       rescue StandardError
         0
+      end
+
+      # Returns diagnostic information to help debug event storage issues.
+      # Use this method in Rails console to understand why events might not be stored.
+      #
+      # @example Check why events aren't being stored
+      #   SolidQueueAutoscaler::ScaleEvent.diagnostics
+      #   # => { table_exists: false, error: "Table does not exist..." }
+      #
+      # @param connection [ActiveRecord::ConnectionAdapters::AbstractAdapter] Database connection
+      # @return [Hash] Diagnostic information
+      def diagnostics(connection: nil)
+        conn = connection || default_connection
+        result = {
+          table_name: TABLE_NAME,
+          connection_class: conn.class.name,
+          table_exists: false,
+          event_count: 0,
+          recent_events: 0,
+          last_event_at: nil,
+          error: nil
+        }
+
+        # Check table existence
+        begin
+          result[:table_exists] = conn.table_exists?(TABLE_NAME)
+        rescue StandardError => e
+          result[:error] = "Failed to check table existence: #{e.message}"
+          return result
+        end
+
+        unless result[:table_exists]
+          result[:error] = "Table does not exist. Run: rails generate solid_queue_autoscaler:migration && rails db:migrate"
+          return result
+        end
+
+        # Get event counts
+        begin
+          result[:event_count] = count(connection: conn)
+          result[:recent_events] = count(since: 24.hours.ago, connection: conn)
+
+          # Get last event time
+          sql = "SELECT MAX(created_at) FROM #{TABLE_NAME}"
+          last_at = conn.select_value(sql)
+          result[:last_event_at] = last_at ? parse_time(last_at) : nil
+        rescue StandardError => e
+          result[:error] = "Failed to query events: #{e.message}"
+        end
+
+        # Add configuration info
+        begin
+          config = SolidQueueAutoscaler.config
+          result[:config] = {
+            record_events: config.record_events,
+            record_all_events: config.record_all_events,
+            record_events_effective: config.record_events?,
+            connection_available: config.connection_available?
+          }
+        rescue StandardError => e
+          result[:config_error] = e.message
+        end
+
+        result
+      rescue StandardError => e
+        { error: "Diagnostics failed: #{e.message}" }
       end
 
       private

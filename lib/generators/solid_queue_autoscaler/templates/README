@@ -5,24 +5,45 @@ SolidQueueAutoscaler has been installed!
 Next steps:
 
 1. Set environment variables:
-   - HEROKU_API_KEY: Generate with `heroku authorizations:create -d "Solid Queue Autoscaler"`
+   - HEROKU_API_KEY: Generate with `heroku authorizations:create -d 'Solid Queue Autoscaler'`
    - HEROKU_APP_NAME: Your Heroku app name
 
-2. Run the migration generator for persistent cooldown tracking:
+2. Run the migration generator:
 
+   SINGLE DATABASE (SolidQueue uses same database as your app):
+   ---------------------------------------------------------------
    rails generate solid_queue_autoscaler:migration
    rails db:migrate
 
-3. Review config/initializers/solid_queue_autoscaler.rb and adjust thresholds
+   MULTI-DATABASE (SolidQueue in separate 'queue' database):
+   ---------------------------------------------------------------
+   The generator will auto-detect your setup and place migrations
+   in the correct directory (e.g., db/queue_migrate/).
 
-4. Add the recurring job to config/recurring.yml:
+   rails generate solid_queue_autoscaler:migration
+   rails db:migrate:queue
+
+   Or specify explicitly:
+   rails generate solid_queue_autoscaler:migration --database=queue
+   rails db:migrate:queue
+
+3. Verify installation:
+
+   rails console
+   > SolidQueueAutoscaler.verify_setup!
+
+   This will check that tables are in the correct database.
+
+4. Review config/initializers/solid_queue_autoscaler.rb and adjust thresholds
+
+5. Add the recurring job to config/recurring.yml:
 
    autoscaler:
      class: SolidQueueAutoscaler::AutoscaleJob
      queue: autoscaler
      schedule: every 30 seconds
 
-5. Configure a dedicated queue in config/queue.yml:
+6. Configure a dedicated queue in config/queue.yml:
 
    queues:
      - autoscaler
@@ -34,7 +55,7 @@ Next steps:
      - queues: [default]
        threads: 5
 
-6. Test with dry_run mode before enabling in production
+7. Test with dry_run mode before enabling in production
 
 For more information, see: https://github.com/reillyse/solid_queue_autoscaler
 

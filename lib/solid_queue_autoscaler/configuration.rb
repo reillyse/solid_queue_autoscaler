@@ -63,6 +63,9 @@ module SolidQueueAutoscaler
     # Dashboard/event recording settings
     attr_accessor :record_events, :record_all_events
 
+    # Cooldown persistence (survives process restarts)
+    attr_accessor :persist_cooldowns
+
     # AutoscaleJob settings
     attr_accessor :job_queue, :job_priority
 
@@ -131,6 +134,9 @@ module SolidQueueAutoscaler
       # Dashboard/event recording settings
       @record_events = true # Record scale events to database
       @record_all_events = false # Also record no_change events (verbose)
+
+      # Cooldown persistence (survives process restarts, requires migration)
+      @persist_cooldowns = true
 
       # AutoscaleJob settings
       @job_queue = :autoscaler # Queue name for the autoscaler job

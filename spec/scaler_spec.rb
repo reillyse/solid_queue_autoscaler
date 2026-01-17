@@ -249,7 +249,8 @@ RSpec.describe SolidQueueAutoscaler::Scaler do
 
       it 'gets current worker count from adapter' do
         scaler.run
-        expect(adapter).to have_received(:current_workers)
+        # Called twice: once for decision, once for verification before scaling
+        expect(adapter).to have_received(:current_workers).at_least(:once)
       end
 
       it 'asks decision engine for scaling decision' do
@@ -814,7 +815,8 @@ RSpec.describe SolidQueueAutoscaler::Scaler do
 
       scaler.run
 
-      expect(adapter).to have_received(:current_workers)
+      # Called once for no_change (no verification needed since we don't scale)
+      expect(adapter).to have_received(:current_workers).at_least(:once)
     end
 
     it 'passes metrics and current_workers to decision engine' do
@@ -1026,7 +1028,8 @@ RSpec.describe SolidQueueAutoscaler::Scaler do
 
     it 'gets current workers from Kubernetes adapter' do
       k8s_scaler.run
-      expect(k8s_adapter).to have_received(:current_workers)
+      # Called twice: once for decision, once for verification before scaling
+      expect(k8s_adapter).to have_received(:current_workers).at_least(:once)
     end
   end
 
@@ -1148,6 +1151,297 @@ RSpec.describe SolidQueueAutoscaler::Scaler do
 
       # The adapter should be a Heroku adapter by default
       expect(config_without_adapter.adapter).to be_a(SolidQueueAutoscaler::Adapters::Heroku)
+    end
+  end
+
+  describe 'race condition protection in apply_decision' do
+    context 'when current_workers changes between decision and apply' do
+      let(:scale_up_decision) do
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
+          action: :scale_up,
+          from: 2,
+          to: 4,
+          reason: 'queue_depth high'
+        )
+      end
+
+      before do
+        allow(metrics_collector).to receive(:collect).and_return(metrics_result)
+        allow(decision_engine).to receive(:decide).and_return(scale_up_decision)
+      end
+
+      it 'logs a warning when current_workers has changed' do
+        # First call returns 2 (for decision), second call returns 3 (changed)
+        allow(adapter).to receive(:current_workers).and_return(2, 3)
+        allow(adapter).to receive(:scale).and_return(4)
+
+        scaler.run
+
+        expect(logger).to have_received(:warn).with(
+          /Worker count changed during decision: expected=2, actual=3/
+        )
+      end
+
+      it 'still scales when current_workers changed but within limits' do
+        # First call returns 2, second call returns 3 (not at max yet)
+        allow(adapter).to receive(:current_workers).and_return(2, 3)
+        allow(adapter).to receive(:scale).and_return(4)
+
+        result = scaler.run
+
+        expect(result.scaled?).to be(true)
+        expect(adapter).to have_received(:scale).with(4)
+      end
+    end
+
+    context 'when re-verification shows already at max_workers during scale_up' do
+      let(:scale_up_decision) do
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
+          action: :scale_up,
+          from: 8,
+          to: 10,
+          reason: 'queue_depth high'
+        )
+      end
+
+      before do
+        config.max_workers = 10
+        allow(metrics_collector).to receive(:collect).and_return(metrics_result)
+        allow(decision_engine).to receive(:decide).and_return(scale_up_decision)
+        # First call returns 8 (for decision), second call returns 10 (another instance scaled)
+        allow(adapter).to receive(:current_workers).and_return(8, 10)
+      end
+
+      it 'aborts the scale_up and returns skipped result' do
+        result = scaler.run
+
+        expect(result.skipped?).to be(true)
+        expect(result.skipped_reason).to include('Aborted scale_up')
+        expect(result.skipped_reason).to include('already at max_workers')
+      end
+
+      it 'does not call adapter.scale' do
+        scaler.run
+        expect(adapter).not_to have_received(:scale)
+      end
+
+      it 'logs a warning about the change' do
+        scaler.run
+        expect(logger).to have_received(:warn).with(/Worker count changed during decision/)
+      end
+    end
+
+    context 'when re-verification shows already at min_workers during scale_down' do
+      let(:scale_down_decision) do
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
+          action: :scale_down,
+          from: 3,
+          to: 2,
+          reason: 'queue_depth low'
+        )
+      end
+
+      before do
+        config.min_workers = 1
+        allow(metrics_collector).to receive(:collect).and_return(metrics_result)
+        allow(decision_engine).to receive(:decide).and_return(scale_down_decision)
+        # First call returns 3 (for decision), second call returns 1 (another instance scaled down)
+        allow(adapter).to receive(:current_workers).and_return(3, 1)
+      end
+
+      it 'aborts the scale_down and returns skipped result' do
+        result = scaler.run
+
+        expect(result.skipped?).to be(true)
+        expect(result.skipped_reason).to include('Aborted scale_down')
+        expect(result.skipped_reason).to include('already at min_workers')
+      end
+
+      it 'does not call adapter.scale' do
+        scaler.run
+        expect(adapter).not_to have_received(:scale)
+      end
+    end
+
+    context 'when decision.to exceeds max_workers (defensive clamping)' do
+      let(:scale_up_decision) do
+        # Simulate a decision that somehow exceeds max_workers
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
+          action: :scale_up,
+          from: 8,
+          to: 15, # Exceeds max_workers of 10
+          reason: 'queue_depth very high'
+        )
+      end
+
+      before do
+        config.max_workers = 10
+        allow(metrics_collector).to receive(:collect).and_return(metrics_result)
+        allow(decision_engine).to receive(:decide).and_return(scale_up_decision)
+        allow(adapter).to receive(:current_workers).and_return(8)
+        allow(adapter).to receive(:scale).and_return(10)
+      end
+
+      it 'clamps the target to max_workers' do
+        scaler.run
+        expect(adapter).to have_received(:scale).with(10) # Clamped from 15
+      end
+
+      it 'logs a warning about clamping' do
+        scaler.run
+        expect(logger).to have_received(:warn).with(
+          /Clamping target from 15 to 10.*limits: 1-10/
+        )
+      end
+
+      it 'returns a successful result' do
+        result = scaler.run
+        expect(result.success?).to be(true)
+      end
+    end
+
+    context 'when decision.to is below min_workers (defensive clamping)' do
+      let(:scale_down_decision) do
+        # Simulate a decision that somehow goes below min_workers
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
+          action: :scale_down,
+          from: 3,
+          to: 0, # Below min_workers of 1
+          reason: 'queue is idle'
+        )
+      end
+
+      before do
+        config.min_workers = 1
+        allow(metrics_collector).to receive(:collect).and_return(metrics_result)
+        allow(decision_engine).to receive(:decide).and_return(scale_down_decision)
+        allow(adapter).to receive(:current_workers).and_return(3)
+        allow(adapter).to receive(:scale).and_return(1)
+      end
+
+      it 'clamps the target to min_workers' do
+        scaler.run
+        expect(adapter).to have_received(:scale).with(1) # Clamped from 0
+      end
+
+      it 'logs a warning about clamping' do
+        scaler.run
+        expect(logger).to have_received(:warn).with(
+          /Clamping target from 0 to 1.*limits: 1-10/
+        )
+      end
+    end
+
+    context 'when target is within limits (no clamping needed)' do
+      let(:scale_up_decision) do
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
+          action: :scale_up,
+          from: 2,
+          to: 5,
+          reason: 'queue_depth high'
+        )
+      end
+
+      before do
+        config.min_workers = 1
+        config.max_workers = 10
+        allow(metrics_collector).to receive(:collect).and_return(metrics_result)
+        allow(decision_engine).to receive(:decide).and_return(scale_up_decision)
+        allow(adapter).to receive(:current_workers).and_return(2)
+        allow(adapter).to receive(:scale).and_return(5)
+      end
+
+      it 'does not log a clamping warning' do
+        scaler.run
+        expect(logger).not_to have_received(:warn).with(/Clamping target/)
+      end
+
+      it 'scales to the exact target' do
+        scaler.run
+        expect(adapter).to have_received(:scale).with(5)
+      end
+    end
+
+    context 'when current_workers unchanged (no race condition)' do
+      let(:scale_up_decision) do
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
+          action: :scale_up,
+          from: 2,
+          to: 3,
+          reason: 'queue_depth high'
+        )
+      end
+
+      before do
+        allow(metrics_collector).to receive(:collect).and_return(metrics_result)
+        allow(decision_engine).to receive(:decide).and_return(scale_up_decision)
+        # Both calls return the same value
+        allow(adapter).to receive(:current_workers).and_return(2)
+        allow(adapter).to receive(:scale).and_return(3)
+      end
+
+      it 'does not log a worker count change warning' do
+        scaler.run
+        expect(logger).not_to have_received(:warn).with(/Worker count changed/)
+      end
+
+      it 'scales normally' do
+        result = scaler.run
+        expect(result.scaled?).to be(true)
+        expect(adapter).to have_received(:scale).with(3)
+      end
+    end
+
+    context 'race condition during scale_up - current increased but not at max' do
+      let(:scale_up_decision) do
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
+          action: :scale_up,
+          from: 2,
+          to: 5,
+          reason: 'queue_depth high'
+        )
+      end
+
+      before do
+        config.max_workers = 10
+        allow(metrics_collector).to receive(:collect).and_return(metrics_result)
+        allow(decision_engine).to receive(:decide).and_return(scale_up_decision)
+        # First call returns 2, second call returns 7 (another instance scaled, but not at max)
+        allow(adapter).to receive(:current_workers).and_return(2, 7)
+        allow(adapter).to receive(:scale).and_return(5)
+      end
+
+      it 'proceeds with scaling since not at max' do
+        result = scaler.run
+        expect(result.scaled?).to be(true)
+        expect(adapter).to have_received(:scale).with(5)
+      end
+    end
+
+    context 'race condition during scale_down - current decreased but not at min' do
+      let(:scale_down_decision) do
+        SolidQueueAutoscaler::DecisionEngine::Decision.new(
+          action: :scale_down,
+          from: 5,
+          to: 3,
+          reason: 'queue_depth low'
+        )
+      end
+
+      before do
+        config.min_workers = 1
+        allow(metrics_collector).to receive(:collect).and_return(metrics_result)
+        allow(decision_engine).to receive(:decide).and_return(scale_down_decision)
+        # First call returns 5, second call returns 2 (another instance scaled down, but not at min)
+        allow(adapter).to receive(:current_workers).and_return(5, 2)
+        allow(adapter).to receive(:scale).and_return(3)
+      end
+
+      it 'proceeds with scaling since not at min' do
+        result = scaler.run
+        expect(result.scaled?).to be(true)
+        expect(adapter).to have_received(:scale).with(3)
+      end
     end
   end
 

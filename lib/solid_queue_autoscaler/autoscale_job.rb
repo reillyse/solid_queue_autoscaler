@@ -2,39 +2,16 @@
 
 module SolidQueueAutoscaler
   class AutoscaleJob < ActiveJob::Base
-    # Use configured queue for the target worker (defaults to :autoscaler)
-    queue_as do
-      # perform(worker_name = :default)
-      worker_name = arguments.first
-
-      # When scaling all workers, or when worker_name is nil, use the default configuration
-      config_name =
-        if worker_name.nil? || worker_name == :all || worker_name == "all"
-          :default
-        else
-          # Handle both Symbol and String values safely
-          worker_name.to_sym rescue :default
-        end
-
-      SolidQueueAutoscaler.config(config_name).job_queue || :autoscaler
-    end
-
-    # Use configured priority for the target worker (defaults to nil/no priority)
-    queue_with_priority do
-      # perform(worker_name = :default)
-      worker_name = arguments.first
-
-      # When scaling all workers, or when worker_name is nil, use the default configuration
-      config_name =
-        if worker_name.nil? || worker_name == :all || worker_name == "all"
-          :default
-        else
-          # Handle both Symbol and String values safely
-          worker_name.to_sym rescue :default
-        end
-
-      SolidQueueAutoscaler.config(config_name).job_priority
-    end
+    # IMPORTANT: Use a static queue name so SolidQueue recurring jobs work correctly.
+    # When using SolidQueue recurring.yml without specifying queue:, SolidQueue
+    # checks the job class's queue_name attribute. A dynamic queue_as block
+    # returns a Proc that isn't evaluated by recurring jobs, causing jobs to
+    # go to 'default' queue instead.
+    #
+    # To use a custom queue:
+    # 1. Set queue: in your recurring.yml (recommended)
+    # 2. Or use AutoscaleJob.set(queue: :my_queue).perform_later
+    queue_as :autoscaler
 
     discard_on ConfigurationError
 

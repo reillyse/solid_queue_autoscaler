@@ -4,6 +4,72 @@
 
 The Solid Queue Heroku Autoscaler is configured via a Rails initializer. All settings have sensible defaults, but at minimum you must provide Heroku API credentials.
 
+## Installation
+
+### 1. Add the Gem
+
+Add to your Gemfile:
+```ruby
+gem 'solid_queue_autoscaler'
+```
+
+### 2. Generate and Run Migrations
+
+The migration generator automatically detects your database setup:
+
+```bash
+rails generate solid_queue_autoscaler:migration
+```
+
+**Single-database setup** (SolidQueue in same database as your app):
+- Migrations are placed in `db/migrate/`
+- Run with: `rails db:migrate`
+
+**Multi-database setup** (SolidQueue in separate database):
+- The generator auto-detects your `queue` database from `database.yml`
+- Migrations are placed in `db/queue_migrate/` (or your configured migrations_paths)
+- Run with: `rails db:migrate:queue`
+
+**Manual override** (if auto-detection doesn't work):
+```bash
+rails generate solid_queue_autoscaler:migration --database=queue
+rails db:migrate:queue
+```
+
+**Example database.yml for multi-database:**
+```yaml
+production:
+  primary:
+    <<: *default
+    database: myapp_production
+  queue:
+    <<: *default
+    database: myapp_production_queue
+    migrations_paths: db/queue_migrate
+```
+
+### 3. Verify Installation
+
+```ruby
+# In Rails console
+SolidQueueAutoscaler.verify_setup!
+```
+
+This will check:
+- ✅ Database connection and table existence
+- ✅ Configuration validity  
+- ✅ Heroku adapter connectivity
+- ⚠️ Any setup issues with clear instructions
+
+### 4. Create Configuration
+
+Use the install generator to create an initializer:
+```bash
+rails generate solid_queue_autoscaler:install
+```
+
+Or create manually (see Basic Configuration below).
+
 ## Basic Configuration
 
 Create an initializer at `config/initializers/solid_queue_autoscaler.rb`:
@@ -435,7 +501,16 @@ The autoscaler runs as a Solid Queue job. Configure it with a dedicated queue:
 # config/recurring.yml
 autoscaler:
   class: SolidQueueAutoscaler::AutoscaleJob
+
+  # Option 1 (recommended): explicitly pin the queue
   queue: autoscaler
+
+  # Option 2: omit `queue:` and rely on the job class default.
+  # AutoscaleJob sets `queue_name = "autoscaler"`, so omitting `queue:`
+  # will still enqueue on the `autoscaler` queue (never `default`).
+  #
+  # queue: autoscaler
+
   schedule: every 30 seconds
 ```
 

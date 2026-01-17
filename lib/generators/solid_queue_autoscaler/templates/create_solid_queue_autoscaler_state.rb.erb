@@ -1,15 +1,15 @@
 # frozen_string_literal: true
 
+# Migration for SolidQueueAutoscaler cooldown state table.
+#
+# For multi-database setups (SolidQueue in separate database):
+#   This migration should be placed in db/queue_migrate/ (or your queue DB's migration path)
+#   Run with: rails db:migrate:queue
+#
+# For single-database setups:
+#   Place in db/migrate/ and run: rails db:migrate
+#
 class CreateSolidQueueAutoscalerState < ActiveRecord::Migration<%= migration_version %>
-  # Use the same database connection as SolidQueue for multi-database setups
-  def self.connection
-    if defined?(SolidQueue::Record) && SolidQueue::Record.respond_to?(:connection)
-      SolidQueue::Record.connection
-    else
-      super
-    end
-  end
-
   def change
     create_table :solid_queue_autoscaler_state do |t|
       t.string :key, null: false
