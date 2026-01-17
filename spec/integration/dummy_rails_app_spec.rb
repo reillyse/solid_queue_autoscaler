@@ -21,11 +21,20 @@ RSpec.describe 'Integration: Dummy Rails App Queue Behavior', :integration do
 
   # Store the original class to restore after all tests
   before(:all) do
-    @original_autoscale_job_class = SolidQueueAutoscaler::AutoscaleJob.dup rescue nil
+    @original_queue_name = SolidQueueAutoscaler::AutoscaleJob.queue_name rescue 'autoscaler'
   end
 
   after(:all) do
     # Ensure the class is properly restored after all integration tests
+    # Always reload the class to get a fresh state with queue_as :autoscaler
+    if SolidQueueAutoscaler.const_defined?(:AutoscaleJob)
+      SolidQueueAutoscaler.send(:remove_const, :AutoscaleJob)
+    end
+    load File.expand_path('../../../lib/solid_queue_autoscaler/autoscale_job.rb', __FILE__)
+  end
+
+  # After each test, restore the queue_name to 'autoscaler'
+  after do
     if SolidQueueAutoscaler.const_defined?(:AutoscaleJob)
       SolidQueueAutoscaler::AutoscaleJob.queue_name = 'autoscaler'
     end
@@ -33,9 +42,6 @@ RSpec.describe 'Integration: Dummy Rails App Queue Behavior', :integration do
 
   # Simulate a fresh Rails boot by unloading and reloading the job class
   def simulate_fresh_rails_boot
-    # Store the current queue_name to restore later
-    original_queue = SolidQueueAutoscaler::AutoscaleJob.queue_name rescue 'autoscaler'
-
     # This simulates what happens during Rails boot:
     # 1. Ruby loads the class file
     # 2. The `queue_as :autoscaler` line executes
@@ -52,7 +58,7 @@ RSpec.describe 'Integration: Dummy Rails App Queue Behavior', :integration do
   ensure
     # Always restore queue_name to 'autoscaler' after test to avoid polluting other tests
     if SolidQueueAutoscaler.const_defined?(:AutoscaleJob)
-      SolidQueueAutoscaler::AutoscaleJob.queue_name = original_queue || 'autoscaler'
+      SolidQueueAutoscaler::AutoscaleJob.queue_name = 'autoscaler'
     end
   end
 
