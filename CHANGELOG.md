@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.13] - 2025-01-17
+
+### Fixed
+- **Fixed AutoscaleJob queue_name type mismatch** - Queue name is now converted to string when set via `apply_job_settings!`
+  - ActiveJob internally uses strings for queue names, but the configuration uses symbols
+  - This caused jobs to have symbol queue names (`:autoscaler`) instead of string (`"autoscaler"`)
+  - Now `apply_job_settings!` calls `.to_s` on the job_queue to ensure consistent string format
+
 ## [1.0.12] - 2025-01-17
 
 ### Fixed
