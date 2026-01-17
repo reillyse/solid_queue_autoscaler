@@ -27,6 +27,8 @@ RSpec.describe SolidQueueAutoscaler::AutoscaleJob, 'e2e queue configuration' do
   after do
     ActiveJob::Base.queue_adapter.enqueued_jobs.clear
     ActiveJob::Base.queue_adapter.performed_jobs.clear
+    # Reset queue_name to default after each test
+    described_class.queue_name = 'autoscaler'
   end
 
   describe 'perform_later enqueues to autoscaler queue' do

@@ -100,6 +100,33 @@ module SolidQueueAutoscaler
       end
     end
 
+    # Apply job settings (queue, priority) from configuration to AutoscaleJob.
+    # Called automatically after Rails initializers run via the railtie.
+    # Uses the first configured worker's job_queue/job_priority settings.
+    def apply_job_settings!
+      return unless defined?(AutoscaleJob)
+      return if configurations.empty?
+
+      # Use the first configured worker's settings
+      first_config = configurations.values.first
+      job_queue = first_config&.job_queue || :autoscaler
+      job_priority = first_config&.job_priority
+
+      # Set the queue_name class attribute directly (not via queue_as block)
+      # This ensures SolidQueue recurring jobs pick up the correct queue
+      # Convert to string since ActiveJob internally uses strings for queue names
+      AutoscaleJob.queue_name = job_queue.to_s
+
+      # Set priority if configured
+      if job_priority && AutoscaleJob.respond_to?(:priority=)
+        AutoscaleJob.priority = job_priority
+      end
+
+      first_config&.logger&.debug(
+        "[SolidQueueAutoscaler] AutoscaleJob configured: queue=#{job_queue}, priority=#{job_priority || 'default'}"
+      )
+    end
+
     # Verify the installation is complete and working.
     # Prints a human-friendly report (when verbose: true) and returns a VerificationResult.
     #

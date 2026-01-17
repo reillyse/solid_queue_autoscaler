@@ -59,6 +59,10 @@ def configure_autoscaler(overrides = {})
       config.send("#{key}=", value) if config.respond_to?("#{key}=")
     end
   end
+
+  # Apply job settings (normally done by railtie after_initialize)
+  # This ensures AutoscaleJob.queue_name is set from config.job_queue
+  SolidQueueAutoscaler.apply_job_settings!
 end
 
 # Test helper to configure with Kubernetes adapter

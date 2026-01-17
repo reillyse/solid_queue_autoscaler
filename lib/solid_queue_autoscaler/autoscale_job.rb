@@ -2,15 +2,17 @@
 
 module SolidQueueAutoscaler
   class AutoscaleJob < ActiveJob::Base
-    # IMPORTANT: Use a static queue name so SolidQueue recurring jobs work correctly.
-    # When using SolidQueue recurring.yml without specifying queue:, SolidQueue
-    # checks the job class's queue_name attribute. A dynamic queue_as block
-    # returns a Proc that isn't evaluated by recurring jobs, causing jobs to
-    # go to 'default' queue instead.
+    # Default queue - this MUST be set here (not dynamically) because SolidQueue
+    # recurring jobs capture the queue name during initialization, BEFORE
+    # Rails after_initialize hooks run.
     #
-    # To use a custom queue:
-    # 1. Set queue: in your recurring.yml (recommended)
-    # 2. Or use AutoscaleJob.set(queue: :my_queue).perform_later
+    # The apply_job_settings! method can override this after Rails initializers
+    # run, but the default must be set here for SolidQueue recurring to work.
+    #
+    # You can customize the queue via:
+    #   config.job_queue = :my_queue
+    #
+    # For SolidQueue recurring.yml, you can also set queue: directly in the YAML.
     queue_as :autoscaler
 
     discard_on ConfigurationError

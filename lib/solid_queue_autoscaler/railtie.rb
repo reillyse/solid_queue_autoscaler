@@ -11,6 +11,11 @@ module SolidQueueAutoscaler
       # Configuration happens via initializer, nothing to do here
     end
 
+    # After all initializers have run, apply job settings from configuration
+    config.after_initialize do
+      SolidQueueAutoscaler.apply_job_settings!
+    end
+
     rake_tasks do
       namespace :solid_queue_autoscaler do
         desc 'Run the autoscaler once for a specific worker (default: :default). Use WORKER=name'

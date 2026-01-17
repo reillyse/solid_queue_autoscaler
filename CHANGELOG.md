@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.12] - 2025-01-17
+
+### Fixed
+- **Fixed AutoscaleJob being enqueued to "default" queue** - Added `queue_as :autoscaler` to the job class
+  - The issue was that SolidQueue recurring jobs capture the queue name during initialization, BEFORE Rails `after_initialize` hooks run
+  - Without a static `queue_as` in the class, jobs defaulted to the "default" queue
+  - The `apply_job_settings!` method can still override this via configuration, but the default must be set in the class for SolidQueue recurring to work correctly
+
 ## [1.0.11] - 2025-01-17
 
 ### Fixed

@@ -20,10 +20,6 @@ module SolidQueueAutoscaler
     #     config.process_type = 'worker'
     #   end
     class Heroku < Base
-      # Retry configuration for transient network errors
-      MAX_RETRIES = 3
-      RETRY_DELAYS = [1, 2, 4].freeze # Exponential backoff in seconds
-
       # Errors that are safe to retry (transient network issues)
       RETRYABLE_ERRORS = [
         Excon::Error::Timeout,
@@ -32,7 +28,7 @@ module SolidQueueAutoscaler
       ].freeze
 
       def current_workers
-        with_retry do
+        with_retry(RETRYABLE_ERRORS, retryable_check: method(:retryable_error?)) do
           formation = client.formation.info(app_name, process_type)
           formation['quantity']
         end
@@ -50,7 +46,7 @@ module SolidQueueAutoscaler
           return quantity
         end
 
-        with_retry do
+        with_retry(RETRYABLE_ERRORS, retryable_check: method(:retryable_error?)) do
           client.formation.update(app_name, process_type, { quantity: quantity })
         end
         quantity
@@ -87,24 +83,6 @@ module SolidQueueAutoscaler
       end
 
       private
-
-      # Executes a block with retry logic for transient network errors.
-      # Uses exponential backoff: 1s, 2s, 4s delays between retries.
-      def with_retry
-        attempts = 0
-        begin
-          attempts += 1
-          yield
-        rescue *RETRYABLE_ERRORS => e
-          if attempts < MAX_RETRIES && retryable_error?(e)
-            delay = RETRY_DELAYS[attempts - 1] || RETRY_DELAYS.last
-            logger&.warn("[Autoscaler] Heroku API error (attempt #{attempts}/#{MAX_RETRIES}), retrying in #{delay}s: #{e.message}")
-            sleep(delay)
-            retry
-          end
-          raise
-        end
-      end
 
       # Determines if an error should be retried.
       # Retries timeouts and 5xx errors, but not 4xx client errors.

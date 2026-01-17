@@ -6,40 +6,79 @@ require 'active_job/test_helper'
 require_relative '../lib/solid_queue_autoscaler/autoscale_job'
 
 RSpec.describe SolidQueueAutoscaler::AutoscaleJob do
-  let(:logger) { instance_double(Logger, info: nil, debug: nil, error: nil) }
+  let(:logger) { instance_double(Logger, info: nil, debug: nil, error: nil, warn: nil) }
 
   before do
     allow_any_instance_of(described_class).to receive(:logger).and_return(logger)
     stub_const('Rails', double('Rails', logger: logger))
     SolidQueueAutoscaler.reset_configuration!
+    # Reset the job queue_name to default for each test (use string, as ActiveJob expects)
+    described_class.queue_name = 'autoscaler'
+  end
+
+  after do
+    # Reset after each test to avoid polluting other tests
+    described_class.queue_name = 'autoscaler'
   end
 
   describe 'job_queue configuration' do
     describe 'class-level queue_name' do
-      it 'has a static class-level queue_name of autoscaler' do
-        # This ensures SolidQueue recurring jobs get the correct queue
-        # when queue: is not specified in recurring.yml
+      it 'uses the configured job_queue after apply_job_settings!' do
+        # Configure with a custom queue
+        SolidQueueAutoscaler.configure(:worker) do |config|
+          config.adapter = :heroku
+          config.heroku_api_key = 'test-key'
+          config.heroku_app_name = 'test-app'
+          config.job_queue = :my_custom_queue
+          config.logger = logger
+        end
+
+        # Apply job settings (normally called by railtie after_initialize)
+        SolidQueueAutoscaler.apply_job_settings!
+
+        # queue_name is converted to string since ActiveJob uses strings internally
+        expect(described_class.queue_name).to eq('my_custom_queue')
+      end
+
+      it 'defaults to autoscaler when job_queue is not set' do
+        SolidQueueAutoscaler.configure(:worker) do |config|
+          config.adapter = :heroku
+          config.heroku_api_key = 'test-key'
+          config.heroku_app_name = 'test-app'
+          config.logger = logger
+          # job_queue defaults to :autoscaler in Configuration
+        end
+
+        SolidQueueAutoscaler.apply_job_settings!
+
         expect(described_class.queue_name).to eq('autoscaler')
       end
 
-      it 'always uses autoscaler queue regardless of arguments' do
-        job = described_class.new
-        job.arguments = [:default]
-        expect(job.queue_name.to_s).to eq('autoscaler')
+      it 'uses the first configured worker\'s job_queue with multiple workers' do
+        SolidQueueAutoscaler.configure(:worker) do |config|
+          config.adapter = :heroku
+          config.heroku_api_key = 'test-key'
+          config.heroku_app_name = 'test-app'
+          config.job_queue = :first_queue
+          config.logger = logger
+        end
 
-        job.arguments = [:critical_worker]
-        expect(job.queue_name.to_s).to eq('autoscaler')
+        SolidQueueAutoscaler.configure(:priority_worker) do |config|
+          config.adapter = :heroku
+          config.heroku_api_key = 'test-key'
+          config.heroku_app_name = 'test-app'
+          config.job_queue = :second_queue
+          config.logger = logger
+        end
 
-        job.arguments = [:all]
-        expect(job.queue_name.to_s).to eq('autoscaler')
+        SolidQueueAutoscaler.apply_job_settings!
+
+        # Uses the first configured worker's queue (converted to string)
+        expect(described_class.queue_name).to eq('first_queue')
       end
     end
 
     describe 'Configuration#job_queue' do
-      # Note: job_queue config is kept for backwards compatibility but
-      # AutoscaleJob now uses a static queue. Users should use set(queue:)
-      # or recurring.yml queue: to override.
-
       it 'defaults to :autoscaler' do
         config = SolidQueueAutoscaler::Configuration.new
         expect(config.job_queue).to eq(:autoscaler)

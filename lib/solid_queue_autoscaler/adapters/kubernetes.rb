@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'net/http'
+
 module SolidQueueAutoscaler
   module Adapters
     # Kubernetes adapter for scaling Deployment replicas.
@@ -30,15 +32,21 @@ module SolidQueueAutoscaler
       # Kubernetes API path for apps/v1 group
       APPS_API_VERSION = 'apis/apps/v1'
 
-      # Retry configuration for transient network errors
-      MAX_RETRIES = 3
-      RETRY_DELAYS = [1, 2, 4].freeze # Exponential backoff in seconds
-
       # Default timeout for Kubernetes API calls (seconds)
       DEFAULT_TIMEOUT = 30
 
+      # Errors that are safe to retry (transient network issues)
+      RETRYABLE_ERRORS = [
+        Errno::ECONNREFUSED,
+        Errno::ETIMEDOUT,
+        Errno::ECONNRESET,
+        Net::OpenTimeout,
+        Net::ReadTimeout,
+        SocketError
+      ].freeze
+
       def current_workers
-        with_retry do
+        with_retry(RETRYABLE_ERRORS) do
           deployment = apps_client.get_deployment(deployment_name, namespace)
           deployment.spec.replicas
         end
@@ -52,7 +60,7 @@ module SolidQueueAutoscaler
           return quantity
         end
 
-        with_retry do
+        with_retry(RETRYABLE_ERRORS) do
           patch_body = { spec: { replicas: quantity } }
           apps_client.patch_deployment(deployment_name, patch_body, namespace)
         end
@@ -74,25 +82,6 @@ module SolidQueueAutoscaler
       end
 
       private
-
-      # Executes a block with retry logic for transient network errors.
-      # Uses exponential backoff: 1s, 2s, 4s delays between retries.
-      def with_retry
-        attempts = 0
-        begin
-          attempts += 1
-          yield
-        rescue Errno::ECONNREFUSED, Errno::ETIMEDOUT, Errno::ECONNRESET,
-               Net::OpenTimeout, Net::ReadTimeout, SocketError => e
-          if attempts < MAX_RETRIES
-            delay = RETRY_DELAYS[attempts - 1] || RETRY_DELAYS.last
-            logger&.warn("[Autoscaler] Kubernetes API error (attempt #{attempts}/#{MAX_RETRIES}), retrying in #{delay}s: #{e.message}")
-            sleep(delay)
-            retry
-          end
-          raise
-        end
-      end
 
       def apps_client
         @apps_client ||= build_apps_client

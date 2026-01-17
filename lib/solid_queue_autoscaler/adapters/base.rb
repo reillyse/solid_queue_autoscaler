@@ -32,6 +32,10 @@ module SolidQueueAutoscaler
     #     end
     #   end
     class Base
+      # Default retry configuration for transient network errors
+      DEFAULT_MAX_RETRIES = 3
+      DEFAULT_RETRY_DELAYS = [1, 2, 4].freeze # Exponential backoff in seconds
+
       # @param config [Configuration] the autoscaler configuration
       def initialize(config:)
         @config = config
@@ -96,6 +100,32 @@ module SolidQueueAutoscaler
       # @return [void]
       def log_dry_run(message)
         logger.info("[DRY RUN] #{message}")
+      end
+
+      # Executes a block with retry logic for transient errors.
+      # Uses exponential backoff with configurable delays.
+      #
+      # @param error_classes [Array<Class>] Exception classes that should trigger a retry
+      # @param max_retries [Integer] Maximum number of retry attempts (default: 3)
+      # @param delays [Array<Integer>] Delay in seconds for each retry (default: [1, 2, 4])
+      # @param retryable_check [Proc, nil] Optional proc to determine if a specific error should be retried
+      # @yield The block to execute with retry logic
+      # @return [Object] The result of the block
+      def with_retry(error_classes, max_retries: DEFAULT_MAX_RETRIES, delays: DEFAULT_RETRY_DELAYS, retryable_check: nil)
+        attempts = 0
+        begin
+          attempts += 1
+          yield
+        rescue *error_classes => e
+          should_retry = retryable_check ? retryable_check.call(e) : true
+          if attempts < max_retries && should_retry
+            delay = delays[attempts - 1] || delays.last
+            logger&.warn("[Autoscaler] #{name} API error (attempt #{attempts}/#{max_retries}), retrying in #{delay}s: #{e.message}")
+            sleep(delay)
+            retry
+          end
+          raise
+        end
       end
     end
   end
