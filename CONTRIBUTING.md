@@ -70,14 +70,46 @@ Once approved and all checks pass, a maintainer will merge your PR.
 
 ## Release Process
 
-Releases are automated via GitHub Actions. To trigger a new release:
+Releases are automated via GitHub Actions when version changes are pushed to `main`.
+
+### ✅ Correct Way to Release
 
 1. **Bump the version** in `lib/solid_queue_autoscaler/version.rb`
 2. **Update CHANGELOG.md** with the new version and changes
-3. Create a PR with these changes
-4. Once merged, the gem is automatically:
-   - Published to RubyGems.org
-   - Tagged with a GitHub Release
+3. **Commit and push directly to main** (or merge a PR):
+   ```bash
+   git add -A
+   git commit -m "Release vX.Y.Z: Brief description"
+   git push origin main
+   ```
+4. The GitHub Actions workflow will automatically:
+   - Run tests
+   - Build and publish the gem to RubyGems.org
+   - Create a GitHub Release with the version tag
+
+### ⚠️ Do NOT Manually Create Tags Before Pushing
+
+**Don't do this:**
+```bash
+# ❌ WRONG - creates tag before workflow runs
+git tag -a v1.0.9 -m "Release v1.0.9"
+git push origin v1.0.9
+```
+
+If you create the tag manually before the workflow runs, the "Create GitHub Release" step will fail with a 403 error because the tag already exists.
+
+**The workflow creates the tag automatically** based on the version in `version.rb`.
+
+### If You Accidentally Created a Tag First
+
+If you pushed a tag before the workflow could create the release:
+
+```bash
+# Create the GitHub release manually
+gh release create vX.Y.Z --title 'vX.Y.Z' --notes 'See CHANGELOG.md for details'
+```
+
+The gem will still be published to RubyGems (that step runs before the GitHub Release step).
 
 ### Version Numbering
 
