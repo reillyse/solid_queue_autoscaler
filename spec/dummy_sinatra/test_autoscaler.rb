@@ -1791,6 +1791,505 @@ rescue => e
 end
 puts
 
+# ============================================================================
+# QUEUE NAME AND JOB PRIORITY CONFIGURATION TESTS
+# These tests verify that queue names can be changed to any custom value
+# and that jobs are correctly configured with the right queue and priority.
+# This was broken in production - these are CRITICAL regression tests.
+# Note: Sinatra doesn't use ActiveJob, so we test configuration directly.
+# ============================================================================
+
+# Test 50: CRITICAL - Change queue name to a completely custom value
+puts "Test 50: CRITICAL - Change queue name to custom value and verify configuration"
+begin
+  # Save original state
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  # Reset everything to simulate a fresh configuration
+  SolidQueueAutoscaler.reset_configuration!
+  
+  # Configure with a UNIQUE custom queue name (like a user would in their app)
+  custom_queue_name = 'my_special_sinatra_queue_12345'
+  
+  SolidQueueAutoscaler.configure(:test_worker) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = custom_queue_name.to_sym
+    config.job_priority = 42
+    config.dry_run = true
+  end
+  
+  # Verify the configuration was set correctly
+  actual_queue = SolidQueueAutoscaler.config(:test_worker).job_queue.to_s
+  
+  if actual_queue == custom_queue_name
+    puts "  ✓ PASS: config.job_queue set to '#{actual_queue}'"
+    results << { test: 'CRITICAL custom queue name', passed: true }
+  else
+    puts "  ✗ FAIL: CRITICAL REGRESSION! config.job_queue = '#{actual_queue}'"
+    puts "         Expected: '#{custom_queue_name}'"
+    results << { test: 'CRITICAL custom queue name', passed: false, error: "job_queue='#{actual_queue}' instead of '#{custom_queue_name}'" }
+  end
+  
+  # Restore original state
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'CRITICAL custom queue name', passed: false, error: e.message }
+end
+puts
+
+# Test 51: CRITICAL - Verify apply_job_settings! changes AutoscaleJob queue
+puts "Test 51: CRITICAL - Verify apply_job_settings! changes AutoscaleJob queue (if ActiveJob available)"
+begin
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  SolidQueueAutoscaler.reset_configuration!
+  
+  custom_queue = 'sinatra_production_queue'
+  
+  SolidQueueAutoscaler.configure(:prod_worker) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = custom_queue.to_sym
+    config.dry_run = true
+  end
+  
+  # Check if ActiveJob and AutoscaleJob are available
+  if defined?(ActiveJob::Base) && defined?(SolidQueueAutoscaler::AutoscaleJob)
+    original_queue = SolidQueueAutoscaler::AutoscaleJob.queue_name
+    
+    SolidQueueAutoscaler.apply_job_settings!
+    
+    actual_queue = SolidQueueAutoscaler::AutoscaleJob.queue_name
+    
+    if actual_queue == custom_queue
+      puts "  ✓ PASS: AutoscaleJob.queue_name changed to '#{actual_queue}'"
+      results << { test: 'CRITICAL apply_job_settings!', passed: true }
+    else
+      puts "  ✗ FAIL: AutoscaleJob.queue_name = '#{actual_queue}' (expected '#{custom_queue}')"
+      results << { test: 'CRITICAL apply_job_settings!', passed: false }
+    end
+    
+    # Restore
+    SolidQueueAutoscaler::AutoscaleJob.queue_name = original_queue
+  else
+    puts "  ✓ PASS: ActiveJob not loaded (expected in Sinatra without ActiveJob)"
+    puts "         Configuration still correctly set: job_queue='#{SolidQueueAutoscaler.config(:prod_worker).job_queue}'"
+    results << { test: 'CRITICAL apply_job_settings!', passed: true }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'CRITICAL apply_job_settings!', passed: false, error: e.message }
+end
+puts
+
+# Test 52: Verify job_priority is applied from configuration
+puts "Test 52: Verify job_priority is applied from configuration"
+begin
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  SolidQueueAutoscaler.reset_configuration!
+  
+  SolidQueueAutoscaler.configure(:priority_test) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :priority_test_queue
+    config.job_priority = 99
+    config.dry_run = true
+  end
+  
+  # Verify the config has the right priority
+  config_priority = SolidQueueAutoscaler.config(:priority_test).job_priority
+  config_queue = SolidQueueAutoscaler.config(:priority_test).job_queue
+  
+  if config_priority == 99 && config_queue == :priority_test_queue
+    puts "  ✓ PASS: job_priority=#{config_priority}, job_queue=:#{config_queue}"
+    results << { test: 'job_priority configuration', passed: true }
+  else
+    puts "  ✗ FAIL: job_priority=#{config_priority} (expected 99), job_queue=#{config_queue} (expected :priority_test_queue)"
+    results << { test: 'job_priority configuration', passed: false }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'job_priority configuration', passed: false, error: e.message }
+end
+puts
+
+# Test 53: Multiple queue name changes work correctly
+puts "Test 53: Multiple queue name changes are applied correctly"
+begin
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  passed = true
+  issues = []
+  
+  # First configuration
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:first) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :first_queue
+    config.dry_run = true
+  end
+  
+  first_result = SolidQueueAutoscaler.config(:first).job_queue.to_s
+  unless first_result == 'first_queue'
+    passed = false
+    issues << "First change: expected 'first_queue', got '#{first_result}'"
+  end
+  
+  # Second configuration (reconfigure)
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:second) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :second_queue
+    config.dry_run = true
+  end
+  
+  second_result = SolidQueueAutoscaler.config(:second).job_queue.to_s
+  unless second_result == 'second_queue'
+    passed = false
+    issues << "Second change: expected 'second_queue', got '#{second_result}'"
+  end
+  
+  # Third configuration
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:third) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :third_queue
+    config.dry_run = true
+  end
+  
+  third_result = SolidQueueAutoscaler.config(:third).job_queue.to_s
+  unless third_result == 'third_queue'
+    passed = false
+    issues << "Third change: expected 'third_queue', got '#{third_result}'"
+  end
+  
+  if passed
+    puts "  ✓ PASS: Multiple queue name changes work correctly"
+    puts "         first_queue -> second_queue -> third_queue"
+    results << { test: 'multiple queue name changes', passed: true }
+  else
+    puts "  ✗ FAIL: #{issues.join(', ')}"
+    results << { test: 'multiple queue name changes', passed: false, error: issues.join(', ') }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'multiple queue name changes', passed: false, error: e.message }
+end
+puts
+
+# Test 54: Full Sinatra-style configuration flow
+puts "Test 54: Full Sinatra-style flow: reset -> configure -> verify"
+begin
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  # Step 1: Reset (simulate fresh Sinatra boot)
+  SolidQueueAutoscaler.reset_configuration!
+  
+  # Step 2: Configure (simulate app.rb configuration)
+  SolidQueueAutoscaler.configure(:sinatra_test) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :sinatra_custom_queue
+    config.job_priority = 5
+    config.dry_run = true
+  end
+  
+  # Step 3: Verify configuration
+  config = SolidQueueAutoscaler.config(:sinatra_test)
+  
+  passed = true
+  issues = []
+  
+  unless config.job_queue.to_s == 'sinatra_custom_queue'
+    passed = false
+    issues << "job_queue='#{config.job_queue}' (expected 'sinatra_custom_queue')"
+  end
+  
+  unless config.job_priority == 5
+    passed = false
+    issues << "job_priority=#{config.job_priority} (expected 5)"
+  end
+  
+  unless config.name == :sinatra_test
+    passed = false
+    issues << "name=#{config.name} (expected :sinatra_test)"
+  end
+  
+  if passed
+    puts "  ✓ PASS: Full Sinatra-style configuration flow works correctly"
+    puts "         job_queue='#{config.job_queue}', job_priority=#{config.job_priority}"
+    results << { test: 'Sinatra-style flow', passed: true }
+  else
+    puts "  ✗ FAIL: #{issues.join(', ')}"
+    results << { test: 'Sinatra-style flow', passed: false, error: issues.join(', ') }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'Sinatra-style flow', passed: false, error: e.message }
+end
+puts
+
+# Test 55: CRITICAL REGRESSION - job_queue should NEVER default to 'default'
+puts "Test 55: CRITICAL REGRESSION - job_queue should NEVER be 'default'"
+begin
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  passed = true
+  issues = []
+  
+  # Test 1: With explicit job_queue set
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:test1) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :explicit_queue
+    config.dry_run = true
+  end
+  
+  queue1 = SolidQueueAutoscaler.config(:test1).job_queue.to_s
+  if queue1 == 'default'
+    passed = false
+    issues << "With explicit job_queue: got 'default' instead of 'explicit_queue'"
+  end
+  
+  # Test 2: With default job_queue (should be :autoscaler)
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:test2) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    # job_queue not set - should default to :autoscaler
+    config.dry_run = true
+  end
+  
+  queue2 = SolidQueueAutoscaler.config(:test2).job_queue.to_s
+  if queue2 == 'default'
+    passed = false
+    issues << "With default job_queue: got 'default' instead of 'autoscaler'"
+  end
+  
+  # Test 3: Verify default value is :autoscaler
+  default_config = SolidQueueAutoscaler::Configuration.new
+  if default_config.job_queue != :autoscaler
+    passed = false
+    issues << "Configuration default job_queue is #{default_config.job_queue} (expected :autoscaler)"
+  end
+  
+  if passed
+    puts "  ✓ PASS: job_queue NEVER defaults to 'default'"
+    puts "         Explicit config: '#{queue1}'"
+    puts "         Default config: '#{queue2}' (Configuration.new default: :autoscaler)"
+    results << { test: 'CRITICAL REGRESSION - never default queue', passed: true }
+  else
+    puts "  ✗ FAIL: CRITICAL REGRESSION DETECTED!"
+    issues.each { |i| puts "         - #{i}" }
+    results << { test: 'CRITICAL REGRESSION - never default queue', passed: false, error: issues.join(', ') }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'CRITICAL REGRESSION - never default queue', passed: false, error: e.message }
+end
+puts
+
+# Test 56: Verify Configuration default values for job_queue and job_priority
+puts "Test 56: Verify Configuration default values for job_queue and job_priority"
+begin
+  # Create a fresh configuration without setting job_queue or job_priority
+  config = SolidQueueAutoscaler::Configuration.new
+  
+  passed = true
+  issues = []
+  
+  # job_queue should default to :autoscaler
+  unless config.job_queue == :autoscaler
+    passed = false
+    issues << "job_queue default is #{config.job_queue.inspect} (expected :autoscaler)"
+  end
+  
+  # job_priority should default to nil
+  unless config.job_priority.nil?
+    passed = false
+    issues << "job_priority default is #{config.job_priority.inspect} (expected nil)"
+  end
+  
+  if passed
+    puts "  ✓ PASS: Configuration defaults are correct"
+    puts "         job_queue default = :#{config.job_queue}"
+    puts "         job_priority default = #{config.job_priority.inspect}"
+    results << { test: 'Configuration defaults', passed: true }
+  else
+    puts "  ✗ FAIL: #{issues.join(', ')}"
+    results << { test: 'Configuration defaults', passed: false, error: issues.join(', ') }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'Configuration defaults', passed: false, error: e.message }
+end
+puts
+
+# Test 57: Verify job_queue can be set as string or symbol
+puts "Test 57: Verify job_queue can be set as string or symbol"
+begin
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  passed = true
+  issues = []
+  
+  # Test with symbol
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:symbol_test) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :symbol_queue
+    config.dry_run = true
+  end
+  
+  symbol_result = SolidQueueAutoscaler.config(:symbol_test).job_queue
+  unless symbol_result == :symbol_queue
+    passed = false
+    issues << "Symbol job_queue: expected :symbol_queue, got #{symbol_result.inspect}"
+  end
+  
+  # Test with string
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:string_test) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = 'string_queue'
+    config.dry_run = true
+  end
+  
+  string_result = SolidQueueAutoscaler.config(:string_test).job_queue
+  # Should accept string as-is
+  unless string_result.to_s == 'string_queue'
+    passed = false
+    issues << "String job_queue: expected 'string_queue', got #{string_result.inspect}"
+  end
+  
+  if passed
+    puts "  ✓ PASS: job_queue accepts both symbol and string"
+    puts "         Symbol: #{symbol_result.inspect}"
+    puts "         String: #{string_result.inspect}"
+    results << { test: 'job_queue symbol/string', passed: true }
+  else
+    puts "  ✗ FAIL: #{issues.join(', ')}"
+    results << { test: 'job_queue symbol/string', passed: false, error: issues.join(', ') }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'job_queue symbol/string', passed: false, error: e.message }
+end
+puts
+
+# Test 58: Verify multiple workers can have different job_queue values
+puts "Test 58: Verify multiple workers can have different job_queue values"
+begin
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  SolidQueueAutoscaler.reset_configuration!
+  
+  SolidQueueAutoscaler.configure(:worker_a) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :queue_a
+    config.job_priority = 1
+    config.dry_run = true
+  end
+  
+  SolidQueueAutoscaler.configure(:worker_b) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :queue_b
+    config.job_priority = 2
+    config.dry_run = true
+  end
+  
+  SolidQueueAutoscaler.configure(:worker_c) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :queue_c
+    config.job_priority = 3
+    config.dry_run = true
+  end
+  
+  config_a = SolidQueueAutoscaler.config(:worker_a)
+  config_b = SolidQueueAutoscaler.config(:worker_b)
+  config_c = SolidQueueAutoscaler.config(:worker_c)
+  
+  passed = true
+  issues = []
+  
+  unless config_a.job_queue == :queue_a && config_a.job_priority == 1
+    passed = false
+    issues << "worker_a: queue=#{config_a.job_queue}, priority=#{config_a.job_priority}"
+  end
+  
+  unless config_b.job_queue == :queue_b && config_b.job_priority == 2
+    passed = false
+    issues << "worker_b: queue=#{config_b.job_queue}, priority=#{config_b.job_priority}"
+  end
+  
+  unless config_c.job_queue == :queue_c && config_c.job_priority == 3
+    passed = false
+    issues << "worker_c: queue=#{config_c.job_queue}, priority=#{config_c.job_priority}"
+  end
+  
+  if passed
+    puts "  ✓ PASS: Multiple workers have different job_queue and job_priority values"
+    puts "         worker_a: queue=:#{config_a.job_queue}, priority=#{config_a.job_priority}"
+    puts "         worker_b: queue=:#{config_b.job_queue}, priority=#{config_b.job_priority}"
+    puts "         worker_c: queue=:#{config_c.job_queue}, priority=#{config_c.job_priority}"
+    results << { test: 'multiple workers different queues', passed: true }
+  else
+    puts "  ✗ FAIL: #{issues.join(', ')}"
+    results << { test: 'multiple workers different queues', passed: false, error: issues.join(', ') }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'multiple workers different queues', passed: false, error: e.message }
+end
+puts
+
 # Summary
 puts "=" * 70
 puts "SUMMARY"
