@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.14] - 2025-01-18
+
+### Added
+- **SQLite and MySQL support for advisory locks** - AdvisoryLock now supports multiple database adapters:
+  - PostgreSQL: Uses native `pg_try_advisory_lock/pg_advisory_unlock`
+  - MySQL/Trilogy: Uses `GET_LOCK/RELEASE_LOCK`
+  - SQLite: Uses table-based locking with auto-created locks table
+  - Other databases: Falls back to table-based locking
+  - Automatic adapter detection via `connection.adapter_name`
+  - Stale lock cleanup (locks older than 5 minutes are removed)
+  - Lock ownership tracking (`hostname:pid:thread_id`)
+
+- **Comprehensive configuration tests** - Added 100+ tests across Rails and Sinatra dummy apps:
+  - Tests for ALL configuration options (job_queue, job_priority, scaling thresholds, cooldowns, etc.)
+  - Decision engine threshold tests verifying scaling logic
+  - End-to-end tests with mocked Heroku API verifying full scaling workflow
+  - Queue name and priority regression tests (prevents jobs going to wrong queue)
+
+- **GitHub Actions integration test workflow** - New CI job that runs dummy app tests:
+  - Runs Rails dummy app tests (62 tests)
+  - Runs Sinatra dummy app tests (58 tests)
+  - Ensures queue name, priority, and E2E scaling tests pass before release
+
+- **Release workflow now requires CI to pass** - Updated release.yml to use `workflow_run` trigger:
+  - Release only runs after CI workflow completes successfully
+  - All unit tests, integration tests, and linting must pass before publishing
+
+### Fixed
+- **Fixed test pollution in autoscale_job_spec** - Changed from using RSpec's `described_class` (which caches class references) to dynamic constant lookup, preventing stale class reference issues when tests reload the AutoscaleJob class
+
 ## [1.0.13] - 2025-01-17
 
 ### Fixed
