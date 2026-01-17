@@ -390,6 +390,216 @@ RSpec.describe SolidQueueAutoscaler::Adapters::Heroku do
     end
   end
 
+  describe 'retry behavior' do
+    before do
+      allow(adapter).to receive(:sleep) # Stub sleep to avoid slow tests
+    end
+
+    describe 'with transient network errors' do
+      context 'when Excon::Error::Timeout occurs' do
+        it 'retries and succeeds on second attempt' do
+          call_count = 0
+          allow(formation_client).to receive(:info) do
+            call_count += 1
+            if call_count == 1
+              raise Excon::Error::Timeout.new('Connection timed out')
+            else
+              { 'quantity' => 3 }
+            end
+          end
+
+          expect(adapter.current_workers).to eq(3)
+          expect(formation_client).to have_received(:info).twice
+        end
+
+        it 'logs a warning on retry' do
+          call_count = 0
+          allow(formation_client).to receive(:info) do
+            call_count += 1
+            if call_count == 1
+              raise Excon::Error::Timeout.new('Connection timed out')
+            else
+              { 'quantity' => 3 }
+            end
+          end
+
+          adapter.current_workers
+          expect(logger).to have_received(:warn).with(/Heroku API error.*attempt 1\/3.*retrying/)
+        end
+      end
+
+      context 'when Excon::Error::Socket occurs' do
+        it 'retries and succeeds on second attempt' do
+          call_count = 0
+          allow(formation_client).to receive(:info) do
+            call_count += 1
+            if call_count == 1
+              raise Excon::Error::Socket.new(StandardError.new('Socket error'))
+            else
+              { 'quantity' => 5 }
+            end
+          end
+
+          expect(adapter.current_workers).to eq(5)
+          expect(formation_client).to have_received(:info).twice
+        end
+      end
+    end
+
+    describe 'exponential backoff' do
+      it 'uses delays of 1s, 2s, 4s between retries' do
+        call_count = 0
+        allow(formation_client).to receive(:info) do
+          call_count += 1
+          if call_count < 4
+            raise Excon::Error::Timeout.new('Timeout')
+          else
+            { 'quantity' => 1 }
+          end
+        end
+
+        # Should fail after 3 retries
+        expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::HerokuAPIError)
+
+        # Verify sleep was called with correct backoff delays
+        expect(adapter).to have_received(:sleep).with(1).ordered
+        expect(adapter).to have_received(:sleep).with(2).ordered
+      end
+    end
+
+    describe 'max retries' do
+      it 'raises error after 3 failed attempts' do
+        allow(formation_client).to receive(:info)
+          .and_raise(Excon::Error::Timeout.new('Persistent timeout'))
+
+        expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::HerokuAPIError)
+        expect(formation_client).to have_received(:info).exactly(3).times
+      end
+
+      it 'logs warning for each retry attempt' do
+        allow(formation_client).to receive(:info)
+          .and_raise(Excon::Error::Timeout.new('Timeout'))
+
+        expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::HerokuAPIError)
+        expect(logger).to have_received(:warn).with(/attempt 1\/3/).once
+        expect(logger).to have_received(:warn).with(/attempt 2\/3/).once
+      end
+    end
+
+    describe 'retry eligibility based on status code' do
+      def error_with_status(status)
+        response = double('response', status: status, body: '{}')
+        error = Excon::Error::HTTPStatus.new('Error')
+        error.define_singleton_method(:response) { response }
+        error
+      end
+
+      context 'with 5xx server errors' do
+        it 'retries on 500 Internal Server Error' do
+          call_count = 0
+          allow(formation_client).to receive(:info) do
+            call_count += 1
+            if call_count == 1
+              raise error_with_status(500)
+            else
+              { 'quantity' => 2 }
+            end
+          end
+
+          expect(adapter.current_workers).to eq(2)
+          expect(formation_client).to have_received(:info).twice
+        end
+
+        it 'retries on 503 Service Unavailable' do
+          call_count = 0
+          allow(formation_client).to receive(:info) do
+            call_count += 1
+            if call_count == 1
+              raise error_with_status(503)
+            else
+              { 'quantity' => 2 }
+            end
+          end
+
+          expect(adapter.current_workers).to eq(2)
+          expect(formation_client).to have_received(:info).twice
+        end
+      end
+
+      context 'with 429 rate limiting' do
+        it 'retries on rate limit error' do
+          call_count = 0
+          allow(formation_client).to receive(:info) do
+            call_count += 1
+            if call_count == 1
+              raise error_with_status(429)
+            else
+              { 'quantity' => 2 }
+            end
+          end
+
+          expect(adapter.current_workers).to eq(2)
+          expect(formation_client).to have_received(:info).twice
+        end
+      end
+
+      context 'with 4xx client errors (except 429)' do
+        it 'does NOT retry on 400 Bad Request' do
+          allow(formation_client).to receive(:info)
+            .and_raise(error_with_status(400))
+
+          expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::HerokuAPIError)
+          expect(formation_client).to have_received(:info).once
+        end
+
+        it 'does NOT retry on 401 Unauthorized' do
+          allow(formation_client).to receive(:info)
+            .and_raise(error_with_status(401))
+
+          expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::HerokuAPIError)
+          expect(formation_client).to have_received(:info).once
+        end
+
+        it 'does NOT retry on 403 Forbidden' do
+          allow(formation_client).to receive(:info)
+            .and_raise(error_with_status(403))
+
+          expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::HerokuAPIError)
+          expect(formation_client).to have_received(:info).once
+        end
+
+        it 'does NOT retry on 404 Not Found' do
+          allow(formation_client).to receive(:info)
+            .and_raise(error_with_status(404))
+
+          expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::HerokuAPIError)
+          expect(formation_client).to have_received(:info).once
+        end
+      end
+    end
+
+    describe 'retry during scale operation' do
+      before do
+        config.dry_run = false
+      end
+
+      it 'retries scale operation on transient error' do
+        call_count = 0
+        allow(formation_client).to receive(:update) do
+          call_count += 1
+          if call_count == 1
+            raise Excon::Error::Timeout.new('Timeout during scale')
+          else
+            { 'quantity' => 5 }
+          end
+        end
+
+        expect(adapter.scale(5)).to eq(5)
+        expect(formation_client).to have_received(:update).twice
+      end
+    end
+  end
+
   describe 'client caching' do
     before do
       allow(formation_client).to receive(:info).and_return({ 'quantity' => 1 })

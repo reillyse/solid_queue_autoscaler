@@ -448,6 +448,225 @@ RSpec.describe SolidQueueAutoscaler::Adapters::Kubernetes do
     end
   end
 
+  describe 'retry behavior' do
+    before do
+      allow(adapter).to receive(:sleep) # Stub sleep to avoid slow tests
+    end
+
+    describe 'with transient network errors' do
+      context 'when Errno::ECONNREFUSED occurs' do
+        it 'retries and succeeds on second attempt' do
+          call_count = 0
+          allow(apps_client).to receive(:get_deployment) do
+            call_count += 1
+            if call_count == 1
+              raise Errno::ECONNREFUSED.new('Connection refused')
+            else
+              deployment
+            end
+          end
+
+          expect(adapter.current_workers).to eq(3)
+          expect(apps_client).to have_received(:get_deployment).twice
+        end
+
+        it 'logs a warning on retry' do
+          call_count = 0
+          allow(apps_client).to receive(:get_deployment) do
+            call_count += 1
+            if call_count == 1
+              raise Errno::ECONNREFUSED.new('Connection refused')
+            else
+              deployment
+            end
+          end
+
+          adapter.current_workers
+          expect(logger).to have_received(:warn).with(/Kubernetes API error.*attempt 1\/3.*retrying/)
+        end
+      end
+
+      context 'when Errno::ETIMEDOUT occurs' do
+        it 'retries and succeeds on second attempt' do
+          call_count = 0
+          allow(apps_client).to receive(:get_deployment) do
+            call_count += 1
+            if call_count == 1
+              raise Errno::ETIMEDOUT.new('Connection timed out')
+            else
+              deployment
+            end
+          end
+
+          expect(adapter.current_workers).to eq(3)
+          expect(apps_client).to have_received(:get_deployment).twice
+        end
+      end
+
+      context 'when Errno::ECONNRESET occurs' do
+        it 'retries and succeeds on second attempt' do
+          call_count = 0
+          allow(apps_client).to receive(:get_deployment) do
+            call_count += 1
+            if call_count == 1
+              raise Errno::ECONNRESET.new('Connection reset')
+            else
+              deployment
+            end
+          end
+
+          expect(adapter.current_workers).to eq(3)
+          expect(apps_client).to have_received(:get_deployment).twice
+        end
+      end
+
+      context 'when Net::OpenTimeout occurs' do
+        it 'retries and succeeds on second attempt' do
+          call_count = 0
+          allow(apps_client).to receive(:get_deployment) do
+            call_count += 1
+            if call_count == 1
+              raise Net::OpenTimeout.new('Open timeout')
+            else
+              deployment
+            end
+          end
+
+          expect(adapter.current_workers).to eq(3)
+          expect(apps_client).to have_received(:get_deployment).twice
+        end
+      end
+
+      context 'when Net::ReadTimeout occurs' do
+        it 'retries and succeeds on second attempt' do
+          call_count = 0
+          allow(apps_client).to receive(:get_deployment) do
+            call_count += 1
+            if call_count == 1
+              raise Net::ReadTimeout.new('Read timeout')
+            else
+              deployment
+            end
+          end
+
+          expect(adapter.current_workers).to eq(3)
+          expect(apps_client).to have_received(:get_deployment).twice
+        end
+      end
+
+      context 'when SocketError occurs' do
+        it 'retries and succeeds on second attempt' do
+          call_count = 0
+          allow(apps_client).to receive(:get_deployment) do
+            call_count += 1
+            if call_count == 1
+              raise SocketError.new('Socket error')
+            else
+              deployment
+            end
+          end
+
+          expect(adapter.current_workers).to eq(3)
+          expect(apps_client).to have_received(:get_deployment).twice
+        end
+      end
+    end
+
+    describe 'exponential backoff' do
+      it 'uses delays of 1s, 2s, 4s between retries' do
+        call_count = 0
+        allow(apps_client).to receive(:get_deployment) do
+          call_count += 1
+          if call_count < 4
+            raise Errno::ECONNREFUSED.new('Connection refused')
+          else
+            deployment
+          end
+        end
+
+        # Should fail after 3 retries
+        expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::KubernetesAPIError)
+
+        # Verify sleep was called with correct backoff delays
+        expect(adapter).to have_received(:sleep).with(1).ordered
+        expect(adapter).to have_received(:sleep).with(2).ordered
+      end
+    end
+
+    describe 'max retries' do
+      it 'raises error after 3 failed attempts' do
+        allow(apps_client).to receive(:get_deployment)
+          .and_raise(Errno::ECONNREFUSED.new('Persistent connection refused'))
+
+        expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::KubernetesAPIError)
+        expect(apps_client).to have_received(:get_deployment).exactly(3).times
+      end
+
+      it 'logs warning for each retry attempt' do
+        allow(apps_client).to receive(:get_deployment)
+          .and_raise(Errno::ETIMEDOUT.new('Timeout'))
+
+        expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::KubernetesAPIError)
+        expect(logger).to have_received(:warn).with(/attempt 1\/3/).once
+        expect(logger).to have_received(:warn).with(/attempt 2\/3/).once
+      end
+    end
+
+    describe 'non-retryable errors' do
+      it 'does NOT retry on generic StandardError' do
+        allow(apps_client).to receive(:get_deployment)
+          .and_raise(StandardError.new('Deployment not found'))
+
+        expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::KubernetesAPIError)
+        expect(apps_client).to have_received(:get_deployment).once
+      end
+
+      it 'does NOT retry on ArgumentError' do
+        allow(apps_client).to receive(:get_deployment)
+          .and_raise(ArgumentError.new('Invalid argument'))
+
+        expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::KubernetesAPIError)
+        expect(apps_client).to have_received(:get_deployment).once
+      end
+    end
+
+    describe 'retry during scale operation' do
+      before do
+        config.dry_run = false
+      end
+
+      it 'retries scale operation on transient error' do
+        call_count = 0
+        allow(apps_client).to receive(:patch_deployment) do
+          call_count += 1
+          if call_count == 1
+            raise Net::ReadTimeout.new('Timeout during scale')
+          else
+            deployment
+          end
+        end
+
+        expect(adapter.scale(5)).to eq(5)
+        expect(apps_client).to have_received(:patch_deployment).twice
+      end
+
+      it 'retries on connection reset during scale' do
+        call_count = 0
+        allow(apps_client).to receive(:patch_deployment) do
+          call_count += 1
+          if call_count == 1
+            raise Errno::ECONNRESET.new('Connection reset')
+          else
+            deployment
+          end
+        end
+
+        expect(adapter.scale(10)).to eq(10)
+        expect(apps_client).to have_received(:patch_deployment).twice
+      end
+    end
+  end
+
   describe 'integration with base class' do
     it 'inherits from Base' do
       expect(described_class.superclass).to eq(SolidQueueAutoscaler::Adapters::Base)
