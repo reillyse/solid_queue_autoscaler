@@ -249,6 +249,99 @@ rescue => e
 end
 puts
 
+# Test 13: Verify SQLite advisory lock support (table-based locking)
+puts "Test 13: Verify SQLite advisory lock support"
+begin
+  # Get the database adapter name
+  adapter_name = ActiveRecord::Base.connection.adapter_name
+  
+  # Create an advisory lock
+  lock = SolidQueueAutoscaler::AdvisoryLock.new(
+    lock_key: 'test_lock_rails',
+    config: SolidQueueAutoscaler.config(:worker)
+  )
+  
+  # Test acquiring the lock
+  acquired = lock.try_lock
+  
+  if acquired
+    puts "  ✓ PASS: Advisory lock acquired successfully (adapter: #{adapter_name})"
+    
+    # Verify we can't acquire it again from a different lock instance
+    lock2 = SolidQueueAutoscaler::AdvisoryLock.new(
+      lock_key: 'test_lock_rails',
+      config: SolidQueueAutoscaler.config(:worker)
+    )
+    acquired2 = lock2.try_lock
+    
+    if !acquired2
+      puts "  ✓ PASS: Second lock correctly blocked"
+    else
+      puts "  ✗ FAIL: Second lock should have been blocked"
+      lock2.release
+    end
+    
+    # Release the lock
+    lock.release
+    
+    # Verify we can acquire it again after release
+    acquired3 = lock2.try_lock
+    if acquired3
+      puts "  ✓ PASS: Lock acquired after release"
+      lock2.release
+      results << { test: 'SQLite advisory lock', passed: true }
+    else
+      puts "  ✗ FAIL: Could not acquire lock after release"
+      results << { test: 'SQLite advisory lock', passed: false }
+    end
+  else
+    puts "  ✗ FAIL: Could not acquire advisory lock"
+    results << { test: 'SQLite advisory lock', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  puts "  Backtrace: #{e.backtrace.first(3).join("\n            ")}"
+  results << { test: 'SQLite advisory lock', passed: false, error: e.message }
+end
+puts
+
+# Test 14: Verify lock strategy detection
+puts "Test 14: Verify lock strategy detection"
+begin
+  adapter_name = ActiveRecord::Base.connection.adapter_name.downcase
+  lock = SolidQueueAutoscaler::AdvisoryLock.new(
+    lock_key: 'test_strategy_detection',
+    config: SolidQueueAutoscaler.config(:worker)
+  )
+  
+  # Access private method to check strategy
+  strategy = lock.send(:lock_strategy)
+  strategy_class = strategy.class.name
+  
+  expected_strategy = case adapter_name
+  when /sqlite/
+    'SolidQueueAutoscaler::AdvisoryLock::SQLiteLockStrategy'
+  when /postgresql/, /postgis/
+    'SolidQueueAutoscaler::AdvisoryLock::PostgreSQLLockStrategy'
+  when /mysql/, /trilogy/
+    'SolidQueueAutoscaler::AdvisoryLock::MySQLLockStrategy'
+  else
+    'SolidQueueAutoscaler::AdvisoryLock::TableBasedLockStrategy'
+  end
+  
+  if strategy_class == expected_strategy
+    puts "  ✓ PASS: Correct lock strategy detected (#{strategy_class})"
+    results << { test: 'Lock strategy detection', passed: true }
+  else
+    puts "  ✗ FAIL: Expected #{expected_strategy}, got #{strategy_class}"
+    results << { test: 'Lock strategy detection', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'Lock strategy detection', passed: false, error: e.message }
+end
+puts
+
 # Summary
 puts "=" * 70
 puts "SUMMARY"

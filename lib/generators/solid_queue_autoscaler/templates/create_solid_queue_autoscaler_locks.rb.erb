@@ -1,0 +1,30 @@
+# frozen_string_literal: true
+
+# Migration for SolidQueueAutoscaler locks table.
+# This table is used for advisory locking on databases that don't support
+# native advisory locks (SQLite, etc.).
+#
+# NOTE: This migration is OPTIONAL. The locks table is automatically created
+# when first needed. Only use this migration if you prefer to manage the
+# table schema explicitly.
+#
+# For multi-database setups (SolidQueue in separate database):
+#   This migration should be placed in db/queue_migrate/ (or your queue DB's migration path)
+#   Run with: rails db:migrate:queue
+#
+# For single-database setups:
+#   Place in db/migrate/ and run: rails db:migrate
+#
+class CreateSolidQueueAutoscalerLocks < ActiveRecord::Migration<%= migration_version %>
+  def change
+    create_table :solid_queue_autoscaler_locks, id: false do |t|
+      t.string :lock_key, null: false, primary_key: true
+      t.integer :lock_id, null: false
+      t.datetime :locked_at, null: false
+      t.string :locked_by, null: false
+    end
+
+    # Index for cleanup of stale locks
+    add_index :solid_queue_autoscaler_locks, :locked_at
+  end
+end

@@ -17,6 +17,7 @@ RSpec.describe 'Integration: Plain Ruby App', :integration do
   let(:mock_connection) do
     instance_double(
       ActiveRecord::ConnectionAdapters::AbstractAdapter,
+      adapter_name: 'PostgreSQL',
       table_exists?: true,
       select_value: 0,
       execute: nil,

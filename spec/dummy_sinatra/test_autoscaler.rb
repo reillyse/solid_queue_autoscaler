@@ -281,6 +281,142 @@ rescue => e
 end
 puts
 
+# Test 13: Set up database for lock tests
+puts "Test 13: Set up SQLite database and test advisory locks"
+begin
+  # Create an in-memory SQLite database for testing
+  ActiveRecord::Base.establish_connection(
+    adapter: 'sqlite3',
+    database: ':memory:'
+  )
+  
+  # Configure a worker with this connection
+  SolidQueueAutoscaler.configure(:lock_test_worker) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.dry_run = true
+  end
+  
+  # Get the database adapter name
+  db_adapter_name = ActiveRecord::Base.connection.adapter_name
+  
+  # Create an advisory lock
+  lock = SolidQueueAutoscaler::AdvisoryLock.new(
+    lock_key: 'test_lock_sinatra',
+    config: SolidQueueAutoscaler.config(:lock_test_worker)
+  )
+  
+  # Test acquiring the lock
+  acquired = lock.try_lock
+  
+  if acquired
+    puts "  ✓ PASS: Advisory lock acquired successfully (adapter: #{db_adapter_name})"
+    
+    # Verify we can't acquire it again from a different lock instance
+    lock2 = SolidQueueAutoscaler::AdvisoryLock.new(
+      lock_key: 'test_lock_sinatra',
+      config: SolidQueueAutoscaler.config(:lock_test_worker)
+    )
+    acquired2 = lock2.try_lock
+    
+    if !acquired2
+      puts "  ✓ PASS: Second lock correctly blocked"
+    else
+      puts "  ✗ FAIL: Second lock should have been blocked"
+      lock2.release
+    end
+    
+    # Release the lock
+    lock.release
+    
+    # Verify we can acquire it again after release
+    acquired3 = lock2.try_lock
+    if acquired3
+      puts "  ✓ PASS: Lock acquired after release"
+      lock2.release
+      results << { test: 'SQLite advisory lock', passed: true }
+    else
+      puts "  ✗ FAIL: Could not acquire lock after release"
+      results << { test: 'SQLite advisory lock', passed: false }
+    end
+  else
+    puts "  ✗ FAIL: Could not acquire advisory lock"
+    results << { test: 'SQLite advisory lock', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  puts "  Backtrace: #{e.backtrace.first(3).join("\n            ")}"
+  results << { test: 'SQLite advisory lock', passed: false, error: e.message }
+end
+puts
+
+# Test 14: Verify lock strategy detection
+puts "Test 14: Verify lock strategy detection"
+begin
+  db_adapter_name = ActiveRecord::Base.connection.adapter_name.downcase
+  lock = SolidQueueAutoscaler::AdvisoryLock.new(
+    lock_key: 'test_strategy_detection',
+    config: SolidQueueAutoscaler.config(:lock_test_worker)
+  )
+  
+  # Access private method to check strategy
+  strategy = lock.send(:lock_strategy)
+  strategy_class = strategy.class.name
+  
+  expected_strategy = case db_adapter_name
+  when /sqlite/
+    'SolidQueueAutoscaler::AdvisoryLock::SQLiteLockStrategy'
+  when /postgresql/, /postgis/
+    'SolidQueueAutoscaler::AdvisoryLock::PostgreSQLLockStrategy'
+  when /mysql/, /trilogy/
+    'SolidQueueAutoscaler::AdvisoryLock::MySQLLockStrategy'
+  else
+    'SolidQueueAutoscaler::AdvisoryLock::TableBasedLockStrategy'
+  end
+  
+  if strategy_class == expected_strategy
+    puts "  ✓ PASS: Correct lock strategy detected (#{strategy_class})"
+    results << { test: 'Lock strategy detection', passed: true }
+  else
+    puts "  ✗ FAIL: Expected #{expected_strategy}, got #{strategy_class}"
+    results << { test: 'Lock strategy detection', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'Lock strategy detection', passed: false, error: e.message }
+end
+puts
+
+# Test 15: Verify locks table was auto-created
+puts "Test 15: Verify locks table was auto-created"
+begin
+  table_exists = ActiveRecord::Base.connection.table_exists?('solid_queue_autoscaler_locks')
+  
+  if table_exists
+    puts "  ✓ PASS: Locks table was auto-created"
+    
+    # Check the table structure
+    columns = ActiveRecord::Base.connection.columns('solid_queue_autoscaler_locks').map(&:name)
+    expected_columns = %w[lock_key lock_id locked_at locked_by]
+    
+    if (expected_columns - columns).empty?
+      puts "  ✓ PASS: Locks table has correct columns: #{columns.join(', ')}"
+      results << { test: 'Locks table auto-created', passed: true }
+    else
+      puts "  ✗ FAIL: Missing columns: #{(expected_columns - columns).join(', ')}"
+      results << { test: 'Locks table auto-created', passed: false }
+    end
+  else
+    puts "  ✗ FAIL: Locks table was not created"
+    results << { test: 'Locks table auto-created', passed: false }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'Locks table auto-created', passed: false, error: e.message }
+end
+puts
+
 # Summary
 puts "=" * 70
 puts "SUMMARY"
