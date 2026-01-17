@@ -47,6 +47,7 @@ RSpec.describe 'Integration: Sinatra App', :integration do
     # Mock database connection for tests
     allow(ActiveRecord::Base).to receive(:connection).and_return(mock_connection)
     allow(mock_connection).to receive(:quote_table_name) { |name| "\"#{name}\"" }
+    allow(mock_connection).to receive(:quote) { |val| val.nil? ? 'NULL' : "'#{val}'" }
   end
 
   after do
