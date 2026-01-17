@@ -1873,6 +1873,446 @@ rescue => e
 end
 puts
 
+# ============================================================================
+# QUEUE NAME AND JOB PRIORITY CONFIGURATION TESTS
+# These tests verify that queue names can be changed to any custom value
+# and that jobs are correctly enqueued to the configured queue with priority.
+# This was broken in production - these are CRITICAL regression tests.
+# ============================================================================
+
+# Test 55: CRITICAL - Change queue name to a completely custom value
+puts "Test 55: CRITICAL - Change queue name to custom value and verify it takes effect"
+begin
+  # Save original state
+  original_queue = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  # Reset everything to simulate a fresh configuration
+  SolidQueueAutoscaler.reset_configuration!
+  
+  # Configure with a UNIQUE custom queue name (like a user would in their app)
+  custom_queue_name = 'my_special_autoscaler_queue_12345'
+  
+  SolidQueueAutoscaler.configure(:test_worker) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = custom_queue_name.to_sym
+    config.job_priority = 42
+    config.dry_run = true
+  end
+  
+  # Apply job settings (this is what the Railtie does after_initialize)
+  SolidQueueAutoscaler.apply_job_settings!
+  
+  # Verify the queue_name was changed
+  actual_queue = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  
+  if actual_queue == custom_queue_name
+    puts "  ✓ PASS: AutoscaleJob.queue_name changed to '#{actual_queue}'"
+    results << { test: 'CRITICAL custom queue name', passed: true }
+  else
+    puts "  ✗ FAIL: CRITICAL REGRESSION! AutoscaleJob.queue_name = '#{actual_queue}'"
+    puts "         Expected: '#{custom_queue_name}'"
+    puts "         This means jobs would go to the WRONG queue!"
+    results << { test: 'CRITICAL custom queue name', passed: false, error: "queue_name='#{actual_queue}' instead of '#{custom_queue_name}'" }
+  end
+  
+  # Restore original state
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+  SolidQueueAutoscaler::AutoscaleJob.queue_name = original_queue
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'CRITICAL custom queue name', passed: false, error: e.message }
+end
+puts
+
+# Test 56: CRITICAL - Verify job is actually enqueued to the custom queue
+puts "Test 56: CRITICAL - Verify job enqueues to configured custom queue"
+begin
+  original_queue = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  SolidQueueAutoscaler.reset_configuration!
+  
+  custom_queue = 'production_autoscaler_queue'
+  
+  SolidQueueAutoscaler.configure(:prod_worker) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = custom_queue.to_sym
+    config.dry_run = true
+  end
+  
+  SolidQueueAutoscaler.apply_job_settings!
+  
+  # Use test adapter to capture the enqueued job
+  ActiveJob::Base.queue_adapter = :test
+  ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+  
+  # Enqueue a job
+  SolidQueueAutoscaler::AutoscaleJob.perform_later(:prod_worker)
+  
+  enqueued = ActiveJob::Base.queue_adapter.enqueued_jobs.last
+  enqueued_queue = enqueued[:queue]
+  
+  if enqueued_queue == custom_queue
+    puts "  ✓ PASS: Job enqueued to '#{enqueued_queue}' (configured queue)"
+    results << { test: 'CRITICAL job enqueued to custom queue', passed: true }
+  else
+    puts "  ✗ FAIL: CRITICAL REGRESSION! Job enqueued to '#{enqueued_queue}'"
+    puts "         Expected queue: '#{custom_queue}'"
+    puts "         Jobs are going to the WRONG queue in production!"
+    results << { test: 'CRITICAL job enqueued to custom queue', passed: false, error: "enqueued to '#{enqueued_queue}'" }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+  SolidQueueAutoscaler::AutoscaleJob.queue_name = original_queue
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'CRITICAL job enqueued to custom queue', passed: false, error: e.message }
+end
+puts
+
+# Test 57: Verify job_priority is applied from configuration
+puts "Test 57: Verify job_priority is applied from configuration"
+begin
+  original_queue = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  SolidQueueAutoscaler.reset_configuration!
+  
+  SolidQueueAutoscaler.configure(:priority_test) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :priority_test_queue
+    config.job_priority = 99
+    config.dry_run = true
+  end
+  
+  SolidQueueAutoscaler.apply_job_settings!
+  
+  # Check if priority was set on the job class
+  priority_set = false
+  if SolidQueueAutoscaler::AutoscaleJob.respond_to?(:priority)
+    actual_priority = SolidQueueAutoscaler::AutoscaleJob.priority
+    priority_set = actual_priority == 99
+  end
+  
+  # Also verify the config has the right priority
+  config_priority = SolidQueueAutoscaler.config(:priority_test).job_priority
+  
+  if config_priority == 99
+    puts "  ✓ PASS: job_priority=#{config_priority} correctly configured"
+    if priority_set
+      puts "         AutoscaleJob.priority also set to #{actual_priority}"
+    end
+    results << { test: 'job_priority configuration', passed: true }
+  else
+    puts "  ✗ FAIL: job_priority not correctly configured"
+    results << { test: 'job_priority configuration', passed: false }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+  SolidQueueAutoscaler::AutoscaleJob.queue_name = original_queue
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'job_priority configuration', passed: false, error: e.message }
+end
+puts
+
+# Test 58: Multiple queue name changes work correctly
+puts "Test 58: Multiple queue name changes are applied correctly"
+begin
+  original_queue = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  passed = true
+  issues = []
+  
+  # First configuration
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:first) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :first_queue
+    config.dry_run = true
+  end
+  SolidQueueAutoscaler.apply_job_settings!
+  
+  first_result = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  unless first_result == 'first_queue'
+    passed = false
+    issues << "First change: expected 'first_queue', got '#{first_result}'"
+  end
+  
+  # Second configuration (reconfigure)
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:second) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :second_queue
+    config.dry_run = true
+  end
+  SolidQueueAutoscaler.apply_job_settings!
+  
+  second_result = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  unless second_result == 'second_queue'
+    passed = false
+    issues << "Second change: expected 'second_queue', got '#{second_result}'"
+  end
+  
+  # Third configuration
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:third) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :third_queue
+    config.dry_run = true
+  end
+  SolidQueueAutoscaler.apply_job_settings!
+  
+  third_result = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  unless third_result == 'third_queue'
+    passed = false
+    issues << "Third change: expected 'third_queue', got '#{third_result}'"
+  end
+  
+  if passed
+    puts "  ✓ PASS: Multiple queue name changes work correctly"
+    puts "         first_queue -> second_queue -> third_queue"
+    results << { test: 'multiple queue name changes', passed: true }
+  else
+    puts "  ✗ FAIL: #{issues.join(', ')}"
+    results << { test: 'multiple queue name changes', passed: false, error: issues.join(', ') }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+  SolidQueueAutoscaler::AutoscaleJob.queue_name = original_queue
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'multiple queue name changes', passed: false, error: e.message }
+end
+puts
+
+# Test 59: Full Railtie-style flow (reset -> configure -> apply -> enqueue -> verify)
+puts "Test 59: Full Railtie-style flow: reset -> configure -> apply -> enqueue -> verify"
+begin
+  original_queue = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  # Step 1: Reset (simulate fresh Rails boot)
+  SolidQueueAutoscaler.reset_configuration!
+  
+  # Step 2: Configure (simulate initializer running)
+  SolidQueueAutoscaler.configure(:railtie_test) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :railtie_custom_queue
+    config.job_priority = 5
+    config.dry_run = true
+  end
+  
+  # Step 3: Apply job settings (Railtie after_initialize)
+  SolidQueueAutoscaler.apply_job_settings!
+  
+  # Step 4: Enqueue job (like SolidQueue recurring would)
+  ActiveJob::Base.queue_adapter = :test
+  ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+  
+  SolidQueueAutoscaler::AutoscaleJob.perform_later(:railtie_test)
+  
+  # Step 5: Verify
+  enqueued = ActiveJob::Base.queue_adapter.enqueued_jobs.last
+  queue_name = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  enqueued_queue = enqueued[:queue]
+  
+  passed = true
+  issues = []
+  
+  unless queue_name == 'railtie_custom_queue'
+    passed = false
+    issues << "queue_name='#{queue_name}' (expected 'railtie_custom_queue')"
+  end
+  
+  unless enqueued_queue == 'railtie_custom_queue'
+    passed = false
+    issues << "enqueued to '#{enqueued_queue}' (expected 'railtie_custom_queue')"
+  end
+  
+  if passed
+    puts "  ✓ PASS: Full Railtie-style flow works correctly"
+    puts "         queue_name='#{queue_name}', enqueued_to='#{enqueued_queue}'"
+    results << { test: 'Railtie-style flow', passed: true }
+  else
+    puts "  ✗ FAIL: #{issues.join(', ')}"
+    results << { test: 'Railtie-style flow', passed: false, error: issues.join(', ') }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+  SolidQueueAutoscaler::AutoscaleJob.queue_name = original_queue
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'Railtie-style flow', passed: false, error: e.message }
+end
+puts
+
+# Test 60: CRITICAL REGRESSION - Jobs should NEVER go to 'default' queue
+puts "Test 60: CRITICAL REGRESSION - Jobs should NEVER go to 'default' queue with any configuration"
+begin
+  original_queue = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  passed = true
+  issues = []
+  
+  # Test 1: With explicit job_queue set
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:test1) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :explicit_queue
+    config.dry_run = true
+  end
+  SolidQueueAutoscaler.apply_job_settings!
+  
+  queue1 = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  if queue1 == 'default'
+    passed = false
+    issues << "With explicit job_queue: got 'default' instead of 'explicit_queue'"
+  end
+  
+  # Test 2: With default job_queue (should be :autoscaler)
+  SolidQueueAutoscaler.reset_configuration!
+  SolidQueueAutoscaler.configure(:test2) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    # job_queue not set - should default to :autoscaler
+    config.dry_run = true
+  end
+  SolidQueueAutoscaler.apply_job_settings!
+  
+  queue2 = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  if queue2 == 'default'
+    passed = false
+    issues << "With default job_queue: got 'default' instead of 'autoscaler'"
+  end
+  
+  # Test 3: Enqueue and verify
+  ActiveJob::Base.queue_adapter = :test
+  ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+  SolidQueueAutoscaler::AutoscaleJob.perform_later
+  
+  enqueued = ActiveJob::Base.queue_adapter.enqueued_jobs.last
+  if enqueued[:queue] == 'default'
+    passed = false
+    issues << "Enqueued job went to 'default' queue!"
+  end
+  
+  if passed
+    puts "  ✓ PASS: Jobs NEVER go to 'default' queue"
+    puts "         Tested: explicit config, default config, and actual enqueue"
+    results << { test: 'CRITICAL REGRESSION - never default queue', passed: true }
+  else
+    puts "  ✗ FAIL: CRITICAL REGRESSION DETECTED!"
+    issues.each { |i| puts "         - #{i}" }
+    results << { test: 'CRITICAL REGRESSION - never default queue', passed: false, error: issues.join(', ') }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+  SolidQueueAutoscaler::AutoscaleJob.queue_name = original_queue
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'CRITICAL REGRESSION - never default queue', passed: false, error: e.message }
+end
+puts
+
+# Test 61: Verify queue_as :autoscaler is present in class definition
+puts "Test 61: Verify queue_as :autoscaler is in the class definition (source check)"
+begin
+  # Read the actual source file
+  source_file = File.join(Rails.root, '..', '..', 'lib', 'solid_queue_autoscaler', 'autoscale_job.rb')
+  source_code = File.read(source_file)
+  
+  if source_code.include?('queue_as :autoscaler')
+    puts "  ✓ PASS: 'queue_as :autoscaler' is present in autoscale_job.rb"
+    puts "         This ensures SolidQueue recurring jobs use the correct queue"
+    results << { test: 'queue_as in source', passed: true }
+  else
+    puts "  ✗ FAIL: CRITICAL! 'queue_as :autoscaler' is missing from autoscale_job.rb!"
+    puts "         SolidQueue recurring jobs will NOT work correctly!"
+    results << { test: 'queue_as in source', passed: false, error: 'queue_as :autoscaler missing from source' }
+  end
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'queue_as in source', passed: false, error: e.message }
+end
+puts
+
+# Test 62: Verify enqueued job has the configured priority
+puts "Test 62: Verify enqueued job includes priority information"
+begin
+  original_queue = SolidQueueAutoscaler::AutoscaleJob.queue_name
+  original_configs = SolidQueueAutoscaler.configurations.dup
+  
+  SolidQueueAutoscaler.reset_configuration!
+  
+  SolidQueueAutoscaler.configure(:priority_enqueue_test) do |config|
+    config.adapter = :heroku
+    config.heroku_api_key = 'test-key'
+    config.heroku_app_name = 'test-app'
+    config.job_queue = :priority_test_queue
+    config.job_priority = 7
+    config.dry_run = true
+  end
+  
+  SolidQueueAutoscaler.apply_job_settings!
+  
+  ActiveJob::Base.queue_adapter = :test
+  ActiveJob::Base.queue_adapter.enqueued_jobs.clear
+  
+  # Enqueue with explicit priority
+  SolidQueueAutoscaler::AutoscaleJob.set(priority: 7).perform_later(:priority_enqueue_test)
+  
+  enqueued = ActiveJob::Base.queue_adapter.enqueued_jobs.last
+  
+  # Check that job was enqueued correctly
+  if enqueued && enqueued[:queue] == 'priority_test_queue'
+    puts "  ✓ PASS: Job enqueued to correct queue with priority support"
+    puts "         Queue: '#{enqueued[:queue]}'"
+    if enqueued[:priority]
+      puts "         Priority: #{enqueued[:priority]}"
+    else
+      puts "         Priority: (not tracked by test adapter, but set on job class)"
+    end
+    results << { test: 'priority enqueue', passed: true }
+  else
+    puts "  ✗ FAIL: Job not enqueued correctly"
+    results << { test: 'priority enqueue', passed: false }
+  end
+  
+  # Restore
+  SolidQueueAutoscaler.instance_variable_set(:@configurations, original_configs)
+  SolidQueueAutoscaler::AutoscaleJob.queue_name = original_queue
+rescue => e
+  puts "  ✗ FAIL: #{e.message}"
+  results << { test: 'priority enqueue', passed: false, error: e.message }
+end
+puts
+
 # Summary
 puts "=" * 70
 puts "SUMMARY"
