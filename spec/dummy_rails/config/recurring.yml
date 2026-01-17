@@ -1,0 +1,9 @@
+# SolidQueue Recurring Jobs Configuration
+# This schedules the autoscaler to run every 30 seconds
+
+autoscaler:
+  class: SolidQueueAutoscaler::AutoscaleJob
+  queue: autoscaler
+  schedule: every 30 seconds
+  args:
+    - all

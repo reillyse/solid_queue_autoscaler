@@ -1,0 +1,12 @@
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+
+gem 'sinatra'
+gem 'puma'
+gem 'activerecord'
+gem 'sqlite3'
+gem 'rake'
+
+# Local gem for testing
+gem 'solid_queue_autoscaler', path: '../..'
