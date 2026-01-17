@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.10] - 2025-01-17
+
+### Fixed
+- **Fixed Dashboard not finding events table in multi-database setups** - `ScaleEvent.default_connection` now correctly uses `SolidQueue::Record.connection` instead of `ActiveRecord::Base.connection`
+  - This was causing "Events table not found" errors when using a separate queue database
+
 ## [1.0.9] - 2025-01-17
 
 ### Added

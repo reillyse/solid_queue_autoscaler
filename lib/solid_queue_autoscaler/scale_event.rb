@@ -395,6 +395,11 @@ module SolidQueueAutoscaler
       private
 
       def default_connection
+        # Use SolidQueue's connection for multi-database setups (same as Configuration.connection)
+        if defined?(SolidQueue::Record) && SolidQueue::Record.respond_to?(:connection)
+          return SolidQueue::Record.connection
+        end
+
         ActiveRecord::Base.connection
       end
 
