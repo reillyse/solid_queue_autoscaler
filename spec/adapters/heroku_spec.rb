@@ -138,11 +138,11 @@ RSpec.describe SolidQueueAutoscaler::Adapters::Heroku do
       end
     end
 
-    context 'when API call fails with Excon error' do
+    context 'when API call fails with Excon error (non-404)' do
       before do
-        response = double('response', status: 404,
-                                      body: '{"id":"not_found","message":"Couldn\'t find that formation."}')
-        error = Excon::Error.new('Not Found')
+        response = double('response', status: 500,
+                                      body: '{"id":"server_error","message":"Internal server error."}')
+        error = Excon::Error.new('Internal Server Error')
         error.define_singleton_method(:response) { response }
         allow(formation_client).to receive(:info).and_raise(error)
       end
@@ -154,23 +154,42 @@ RSpec.describe SolidQueueAutoscaler::Adapters::Heroku do
 
       it 'includes the original error message' do
         expect { adapter.current_workers }
-          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Not Found/)
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Internal Server Error/)
       end
 
       it 'captures status code in error' do
         adapter.current_workers
       rescue SolidQueueAutoscaler::HerokuAPIError => e
-        expect(e.status_code).to eq(404)
+        expect(e.status_code).to eq(500)
       end
 
       it 'captures response body in error' do
         adapter.current_workers
       rescue SolidQueueAutoscaler::HerokuAPIError => e
-        expect(e.response_body).to include('not_found')
+        expect(e.response_body).to include('server_error')
       end
     end
 
-    context 'when formation does not exist' do
+    context 'when formation does not exist (404)' do
+      before do
+        response = double('response', status: 404,
+                                      body: '{"id":"not_found","message":"Couldn\'t find that formation."}')
+        error = Excon::Error.new('Not Found')
+        error.define_singleton_method(:response) { response }
+        allow(formation_client).to receive(:info).and_raise(error)
+      end
+
+      it 'returns 0 instead of raising an error' do
+        expect(adapter.current_workers).to eq(0)
+      end
+
+      it 'logs a debug message' do
+        adapter.current_workers
+        expect(logger).to have_received(:debug).with(/Formation 'worker' not found, treating as 0 workers/)
+      end
+    end
+
+    context 'when formation does not exist (generic error without status)' do
       before do
         allow(formation_client).to receive(:info)
           .and_raise(Excon::Error.new('Formation not found'))
@@ -231,6 +250,52 @@ RSpec.describe SolidQueueAutoscaler::Adapters::Heroku do
         adapter.scale(1)
         expect(formation_client).to have_received(:update)
           .with('my-test-app', 'worker', { quantity: 1 })
+      end
+    end
+
+    context 'when formation does not exist (404)' do
+      before do
+        config.dry_run = false
+        response = double('response', status: 404,
+                                      body: '{"id":"not_found","message":"Couldn\'t find that formation."}')
+        error = Excon::Error.new('Not Found')
+        error.define_singleton_method(:response) { response }
+        allow(formation_client).to receive(:update).and_raise(error)
+        allow(formation_client).to receive(:batch_update)
+          .and_return([{ 'type' => 'worker', 'quantity' => 3 }])
+      end
+
+      it 'falls back to batch_update to create the formation' do
+        expect(adapter.scale(3)).to eq(3)
+        expect(formation_client).to have_received(:batch_update)
+          .with('my-test-app', { updates: [{ type: 'worker', quantity: 3 }] })
+      end
+
+      it 'logs an info message about creating the formation' do
+        adapter.scale(3)
+        expect(logger).to have_received(:info).with(/Formation 'worker' not found, creating with quantity 3/)
+      end
+    end
+
+    context 'when formation does not exist and batch_update also fails' do
+      before do
+        config.dry_run = false
+        response_404 = double('response', status: 404,
+                                         body: '{"id":"not_found","message":"Couldn\'t find that formation."}')
+        error_404 = Excon::Error.new('Not Found')
+        error_404.define_singleton_method(:response) { response_404 }
+        allow(formation_client).to receive(:update).and_raise(error_404)
+
+        response_422 = double('response', status: 422,
+                                         body: '{"id":"invalid_params","message":"Invalid process type."}')
+        error_422 = Excon::Error.new('Unprocessable Entity')
+        error_422.define_singleton_method(:response) { response_422 }
+        allow(formation_client).to receive(:batch_update).and_raise(error_422)
+      end
+
+      it 'raises HerokuAPIError with details about creating the formation' do
+        expect { adapter.scale(3) }
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Failed to create formation worker with quantity 3/)
       end
     end
 
@@ -568,11 +633,12 @@ RSpec.describe SolidQueueAutoscaler::Adapters::Heroku do
           expect(formation_client).to have_received(:info).once
         end
 
-        it 'does NOT retry on 404 Not Found' do
+        it 'does NOT retry on 404 Not Found (returns 0 instead)' do
           allow(formation_client).to receive(:info)
             .and_raise(error_with_status(404))
 
-          expect { adapter.current_workers }.to raise_error(SolidQueueAutoscaler::HerokuAPIError)
+          # 404 is handled gracefully by returning 0, not retrying or raising
+          expect(adapter.current_workers).to eq(0)
           expect(formation_client).to have_received(:info).once
         end
       end
@@ -716,7 +782,7 @@ RSpec.describe SolidQueueAutoscaler::Adapters::Heroku, 'Error Scenarios' do
     end
   end
 
-  describe 'not found errors (404)' do
+  describe 'not found errors (404) for formation info' do
     before do
       allow(formation_client).to receive(:info).and_raise(
         excon_error_with_response(
@@ -727,15 +793,13 @@ RSpec.describe SolidQueueAutoscaler::Adapters::Heroku, 'Error Scenarios' do
       )
     end
 
-    it 'raises HerokuAPIError for missing formation' do
-      expect { adapter.current_workers }
-        .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Not Found/)
+    it 'returns 0 workers instead of raising an error' do
+      expect(adapter.current_workers).to eq(0)
     end
 
-    it 'captures the 404 status code' do
+    it 'logs a debug message about the missing formation' do
       adapter.current_workers
-    rescue SolidQueueAutoscaler::HerokuAPIError => e
-      expect(e.status_code).to eq(404)
+      expect(logger).to have_received(:debug).with(/Formation 'worker' not found, treating as 0 workers/)
     end
   end
 
@@ -852,6 +916,40 @@ RSpec.describe SolidQueueAutoscaler::Adapters::Heroku, 'Error Scenarios' do
       new_adapter = described_class.new(config: config)
       allow(PlatformAPI).to receive(:connect_oauth).and_return(platform_client)
       expect(new_adapter.current_workers).to eq(5)
+    end
+  end
+
+  describe 'scale-to-zero workflow' do
+    it 'handles the full cycle: formation exists -> scaled to 0 -> removed -> scale back up' do
+      # Step 1: Formation exists with 2 workers
+      allow(formation_client).to receive(:info)
+        .with('my-heroku-app', 'worker')
+        .and_return({ 'quantity' => 2 })
+      expect(adapter.current_workers).to eq(2)
+
+      # Step 2: Scale to 0
+      allow(formation_client).to receive(:update)
+        .with('my-heroku-app', 'worker', { quantity: 0 })
+        .and_return({ 'quantity' => 0 })
+      expect(adapter.scale(0)).to eq(0)
+
+      # Step 3: Formation is removed by Heroku (404 on info)
+      response_404 = double('response', status: 404,
+                                       body: '{"id":"not_found","message":"Couldn\'t find that formation."}')
+      error_404 = Excon::Error.new('Not Found')
+      error_404.define_singleton_method(:response) { response_404 }
+      allow(formation_client).to receive(:info).and_raise(error_404)
+      expect(adapter.current_workers).to eq(0)
+
+      # Step 4: Scale back up - update fails with 404, batch_update creates formation
+      allow(formation_client).to receive(:update)
+        .with('my-heroku-app', 'worker', { quantity: 3 })
+        .and_raise(error_404)
+      allow(formation_client).to receive(:batch_update)
+        .with('my-heroku-app', { updates: [{ type: 'worker', quantity: 3 }] })
+        .and_return([{ 'type' => 'worker', 'quantity' => 3 }])
+      expect(adapter.scale(3)).to eq(3)
+      expect(formation_client).to have_received(:batch_update)
     end
   end
 

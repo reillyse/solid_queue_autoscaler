@@ -4,5 +4,21 @@
   "language": "ruby",
   "framework": "rails",
   "testCommand": "bundle exec rspec",
-  "buildCommand": "bundle exec rake build"
+  "buildCommand": "bundle exec rake build",
+  "hippo": {
+    "path": "/Users/sean/Programming/hippo/build/hippo",
+    "rules": [
+      "RULE 1: Search Hippo FIRST before reading files, planning, or writing code",
+      "RULE 2: Store to Hippo AFTER every response with detailed output",
+      "RULE 3: Use ONLY the CLI via commander agent with rawOutput: true"
+    ],
+    "commands": {
+      "search": "/Users/sean/Programming/hippo/build/hippo search '<query>' --limit 10",
+      "store": "/Users/sean/Programming/hippo/build/hippo store --agent codebuff --session '<id>' --input '<summary>' --output '<detailed>' --concepts '<topics>' --outcome <outcome>",
+      "context": "/Users/sean/Programming/hippo/build/hippo context '<query>' --max-tokens 4000",
+      "snapshot": "/Users/sean/Programming/hippo/build/hippo snapshot --limit 5 --short",
+      "sessions": "/Users/sean/Programming/hippo/build/hippo sessions --limit 10"
+    },
+    "outcomes": ["success", "failure", "partial", "decision", "discovery", "recall", "blocked"]
+  }
 }

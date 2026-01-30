@@ -33,6 +33,13 @@ module SolidQueueAutoscaler
           formation['quantity']
         end
       rescue Excon::Error => e
+        # Handle 404 gracefully - formation doesn't exist means 0 workers
+        # This happens when a dyno type is scaled to 0 and removed from formation
+        if e.respond_to?(:response) && e.response&.status == 404
+          logger&.debug("[Autoscaler] Formation '#{process_type}' not found, treating as 0 workers")
+          return 0
+        end
+
         raise HerokuAPIError.new(
           "Failed to get formation info: #{e.message}",
           status_code: e.respond_to?(:response) ? e.response&.status : nil,
@@ -51,6 +58,12 @@ module SolidQueueAutoscaler
         end
         quantity
       rescue Excon::Error => e
+        # Handle 404 by trying to create the formation via batch_update
+        # This happens when scaling up a dyno type that was previously scaled to 0
+        if e.respond_to?(:response) && e.response&.status == 404
+          return create_formation(quantity)
+        end
+
         raise HerokuAPIError.new(
           "Failed to scale #{process_type} to #{quantity}: #{e.message}",
           status_code: e.respond_to?(:response) ? e.response&.status : nil,
@@ -83,6 +96,31 @@ module SolidQueueAutoscaler
       end
 
       private
+
+      # Creates a formation that doesn't exist using batch_update.
+      # This is needed when scaling up a dyno type that was previously scaled to 0.
+      #
+      # @param quantity [Integer] desired worker count
+      # @return [Integer] the new worker count
+      # @raise [HerokuAPIError] if the API call fails
+      def create_formation(quantity)
+        logger&.info("[Autoscaler] Formation '#{process_type}' not found, creating with quantity #{quantity}")
+
+        with_retry(RETRYABLE_ERRORS, retryable_check: method(:retryable_error?)) do
+          client.formation.batch_update(app_name, {
+            updates: [
+              { type: process_type, quantity: quantity }
+            ]
+          })
+        end
+        quantity
+      rescue Excon::Error => e
+        raise HerokuAPIError.new(
+          "Failed to create formation #{process_type} with quantity #{quantity}: #{e.message}",
+          status_code: e.respond_to?(:response) ? e.response&.status : nil,
+          response_body: e.respond_to?(:response) ? e.response&.body : nil
+        )
+      end
 
       # Determines if an error should be retried.
       # Retries timeouts and 5xx errors, but not 4xx client errors.
