@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.15] - 2025-01-30
+
+### Fixed
+- **Fixed Heroku adapter 404 error when querying scaled-to-zero dynos** - When a dyno type is scaled to 0 and removed from Heroku's formation, the API returns 404. The adapter now handles this gracefully:
+  - `current_workers` returns 0 instead of raising an error when formation doesn't exist
+  - `scale` falls back to `batch_update` API to create the formation when `update` returns 404
+  - Added `create_formation` private method using Heroku's batch_update endpoint
+  - This enables full scale-to-zero support with `min_workers = 0`
+
 ## [1.0.14] - 2025-01-18
 
 ### Added
