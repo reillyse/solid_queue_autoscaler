@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.18] - 2025-01-31
+
+### Fixed
+- **Fixed GitHub Actions release workflow** - Added `contents: write` permission to the release job to fix 403 Forbidden error when creating GitHub releases with `GITHUB_TOKEN`
+
 ## [1.0.17] - 2025-01-30
 
 ### Added
