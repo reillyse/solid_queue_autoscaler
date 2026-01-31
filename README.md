@@ -10,11 +10,97 @@ A control plane for [Solid Queue](https://github.com/rails/solid_queue) that aut
 - **Metrics-based scaling**: Scales based on queue depth, job latency, and throughput
 - **Multiple scaling strategies**: Fixed increment or proportional scaling based on load
 - **Multi-worker support**: Configure and scale different worker types independently
+- **Scale to zero**: Full support for `min_workers = 0` to eliminate costs during idle periods
 - **Platform adapters**: Native support for Heroku and Kubernetes
 - **Singleton execution**: Uses PostgreSQL advisory locks to ensure only one autoscaler runs at a time
 - **Safety features**: Cooldowns, min/max limits, dry-run mode
 - **Rails integration**: Configuration via initializer, Railtie with rake tasks
 - **Flexible execution**: Run as a recurring Solid Queue job or standalone
+
+## Scale to Zero
+
+The autoscaler fully supports scaling workers to zero (`min_workers = 0`), allowing you to eliminate worker costs during idle periods.
+
+### How It Works
+
+When you configure `min_workers = 0` and the queue becomes idle, the autoscaler will scale your workers down to zero. This is ideal for:
+
+- **Development/staging environments** with sporadic usage
+- **Batch processing workers** that only run when jobs are queued
+- **Cost-sensitive applications** with predictable idle periods
+
+### Heroku Formation Behavior
+
+On Heroku, when a dyno type is scaled to 0, it gets **removed from the formation entirely**. This means:
+
+1. `heroku ps:scale worker=0` removes the `worker` formation
+2. Subsequent API calls to get formation info return **404 Not Found**
+3. When scaling back up, the formation must be **recreated**
+
+As of **v1.0.15**, the autoscaler handles this gracefully:
+
+- When querying a non-existent formation, it returns `0` workers (instead of raising an error)
+- When scaling up a non-existent formation, it automatically creates it using Heroku's batch update API
+- This enables seamless scale-to-zero → scale-up workflows
+
+### Configuration Example
+
+```ruby
+SolidQueueAutoscaler.configure(:batch_worker) do |config|
+  config.adapter = :heroku
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'batch_worker'
+
+  # Enable scale-to-zero
+  config.min_workers = 0
+  config.max_workers = 5
+
+  # Scale up immediately when any job is queued
+  config.scale_up_queue_depth = 1
+  config.scale_up_latency_seconds = 60
+
+  # Scale down when completely idle
+  config.scale_down_queue_depth = 0
+  config.scale_down_latency_seconds = 10
+
+  # Longer scale-down cooldown to avoid premature scaling to zero
+  config.scale_up_cooldown_seconds = 30
+  config.scale_down_cooldown_seconds = 300  # 5 minutes
+end
+```
+
+### Important Considerations
+
+**Cold-start latency**: When workers are at zero and a job is enqueued, there will be latency before the job is processed:
+1. The autoscaler job must run (depends on your `schedule` interval)
+2. The autoscaler must scale up workers
+3. Heroku must provision and start the dyno (~10-30 seconds)
+4. The worker must boot and start processing
+
+Total cold-start time is typically **30-90 seconds** depending on your configuration and dyno startup time.
+
+**Where to run the autoscaler**: The autoscaler job **must run on a process that's always running** (like your web dyno), NOT on the workers being scaled. If the autoscaler runs on workers and those workers scale to zero, there's nothing to scale them back up!
+
+```yaml
+# config/recurring.yml - runs on whatever process runs the dispatcher
+autoscaler_batch:
+  class: SolidQueueAutoscaler::AutoscaleJob
+  queue: autoscaler
+  schedule: every 30 seconds
+  args: [:batch_worker]
+```
+
+**Procfile setup**: Ensure your web dyno runs the Solid Queue dispatcher (or use a dedicated always-on dyno):
+
+```
+# Procfile
+web: bundle exec puma -C config/puma.rb
+worker: bundle exec rake solid_queue:start
+batch_worker: bundle exec rake solid_queue:start
+```
+
+Alternatively, run the dispatcher in a thread within your web process using `solid_queue.yml` configuration.
 
 ## Installation
 
@@ -308,7 +394,7 @@ autoscaler:
 
 ### Cost-Optimized Setup (Scale to Zero)
 
-For apps with sporadic workloads where you want to minimize costs during idle periods:
+For apps with sporadic workloads where you want to minimize costs during idle periods. See the [Scale to Zero](#scale-to-zero) section for full details on how this works.
 
 ```ruby
 SolidQueueAutoscaler.configure do |config|
@@ -337,7 +423,7 @@ SolidQueueAutoscaler.configure do |config|
 end
 ```
 
-**⚠️ Note:** With `min_workers = 0`, there's cold-start latency when the first job arrives. The autoscaler must run on a web dyno or separate process, not on the workers themselves.
+**⚠️ Note:** With `min_workers = 0`, there's cold-start latency (~30-90s) when the first job arrives. The autoscaler must run on a web dyno or separate always-on process, not on the workers themselves. See [Scale to Zero](#scale-to-zero) for details.
 
 ---
 
