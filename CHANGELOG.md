@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.17] - 2025-01-30
+
+### Added
+- **Comprehensive scale-to-zero integration tests** - 22 new tests in `spec/integration/scale_to_zero_workflow_spec.rb`:
+  - Full lifecycle tests: formation exists → scale to 0 → 404 on info → scale up via `batch_update`
+  - Heroku adapter 404 handling verification (returns 0 instead of error)
+  - Scaler integration with `min_workers=0` configuration
+  - Decision Engine behavior at zero workers
+  - Multiple worker types (batch can scale to zero, realtime cannot)
+  - Error handling: 404 graceful vs 401/403/500 errors
+  - Dry run mode with scale-to-zero
+  - Cold start scenario (formation never existed)
+
 ## [1.0.16] - 2025-01-30
 
 ### Added
