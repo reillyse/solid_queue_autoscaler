@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.16] - 2025-01-30
+
+### Added
+- **Comprehensive scale-to-zero documentation** - Added dedicated "Scale to Zero" section in README:
+  - Explains how `min_workers = 0` works with Heroku formation behavior
+  - Documents the v1.0.15 fix for graceful 404 handling
+  - Includes configuration examples and cold-start latency considerations
+  - Guidance on where to run the autoscaler (web dyno vs workers)
+  - Updated Features list and linked Cost-Optimized example
+
 ## [1.0.15] - 2025-01-30
 
 ### Fixed
