@@ -18,6 +18,9 @@ jobs:
   release:
     name: Release to RubyGems
     runs-on: ubuntu-latest
+    # Required for creating GitHub releases and uploading assets
+    permissions:
+      contents: write
     # Only run if CI workflow succeeded (not on workflow_dispatch which bypasses this)
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     
