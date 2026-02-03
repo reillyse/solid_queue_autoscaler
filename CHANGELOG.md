@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.21] - 2025-02-02
+
+### Added
+- **Scale-from-zero documentation** - Updated README and docs/configuration.md with:
+  - New "Faster Scale-from-Zero" section explaining the v1.0.20 optimizations
+  - Configuration reference for `scale_from_zero_queue_depth` and `scale_from_zero_latency_seconds`
+  - Example configuration showing how to customize scale-from-zero behavior
+  - Explanation of cooldown bypass and grace period for other workers
+
 ## [1.0.20] - 2025-02-02
 
 ### Added

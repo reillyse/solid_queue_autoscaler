@@ -234,6 +234,23 @@ SolidQueueAutoscaler.configure do |config|
   config.scale_down_cooldown_seconds = 180
   
   # ============================================
+  # Scale-from-Zero Optimization
+  # Faster cold starts when min_workers=0 and currently at 0 workers
+  # ============================================
+  
+  # When at 0 workers, scale up if queue has at least this many jobs
+  # Uses a lower threshold than scale_up_queue_depth for faster response
+  # Default: 1
+  config.scale_from_zero_queue_depth = 1
+  
+  # When at 0 workers, job must be at least this old (seconds) before scaling up
+  # This gives other worker types a brief chance to pick up the job first
+  # Default: 1.0
+  config.scale_from_zero_latency_seconds = 1.0
+  
+  # Note: Cooldowns are automatically bypassed when scaling from 0 workers
+  
+  # ============================================
   # Advisory Lock Settings
   # Ensures only one autoscaler runs at a time
   # ============================================
@@ -572,6 +589,8 @@ end
 | `lock_timeout_seconds` | Must be > 0 |
 | `table_prefix` | Must end with an underscore |
 | `scaling_strategy` | Must be `:fixed` or `:proportional` |
+| `scale_from_zero_queue_depth` | Must be >= 1 |
+| `scale_from_zero_latency_seconds` | Must be >= 0 |
 
 ## Runtime Configuration Changes
 

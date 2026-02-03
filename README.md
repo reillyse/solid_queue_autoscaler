@@ -80,6 +80,41 @@ end
 
 Total cold-start time is typically **30-90 seconds** depending on your configuration and dyno startup time.
 
+### Faster Scale-from-Zero (v1.0.20+)
+
+As of **v1.0.20**, the autoscaler includes optimizations for faster cold starts when scaling from zero:
+
+1. **Lower thresholds at zero**: When workers are at 0 (with `min_workers = 0`), the autoscaler uses separate, more aggressive thresholds:
+   - `scale_from_zero_queue_depth` (default: 1) - Scale up when there's at least 1 job
+   - `scale_from_zero_latency_seconds` (default: 1.0) - Job must be at least 1 second old
+
+2. **Cooldown bypass**: Cooldowns are skipped when scaling from 0 workers, ensuring the fastest possible response.
+
+3. **Grace period for other workers**: The `scale_from_zero_latency_seconds` setting (default: 1 second) ensures that if you have multiple worker types, other workers have a brief chance to pick up the job before a new dyno is spun up.
+
+**Example configuration:**
+
+```ruby
+SolidQueueAutoscaler.configure(:batch_worker) do |config|
+  config.adapter = :heroku
+  config.heroku_api_key = ENV['HEROKU_API_KEY']
+  config.heroku_app_name = ENV['HEROKU_APP_NAME']
+  config.process_type = 'batch_worker'
+
+  # Enable scale-to-zero
+  config.min_workers = 0
+  config.max_workers = 5
+
+  # Normal scaling thresholds (used when workers > 0)
+  config.scale_up_queue_depth = 100
+  config.scale_up_latency_seconds = 300
+
+  # Scale-from-zero thresholds (used when workers == 0)
+  config.scale_from_zero_queue_depth = 1        # Scale up with just 1 job
+  config.scale_from_zero_latency_seconds = 2.0  # Wait 2 seconds for other workers
+end
+```
+
 **Where to run the autoscaler**: The autoscaler job **must run on a process that's always running** (like your web dyno), NOT on the workers being scaled. If the autoscaler runs on workers and those workers scale to zero, there's nothing to scale them back up!
 
 ```yaml
@@ -325,6 +360,17 @@ Scaling down triggers when **ALL** thresholds are met:
 | `scale_up_cooldown_seconds` | Integer | `nil` | Override for scale-up cooldown |
 | `scale_down_cooldown_seconds` | Integer | `nil` | Override for scale-down cooldown |
 | `persist_cooldowns` | Boolean | `true` | Save cooldowns to database |
+
+### Scale-from-Zero Optimization
+
+These settings control the faster cold-start behavior when `min_workers = 0` and workers are currently at 0:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `scale_from_zero_queue_depth` | Integer | `1` | Jobs in queue to trigger scale-up when at 0 workers |
+| `scale_from_zero_latency_seconds` | Float | `1.0` | Job must be at least this old (gives other workers a chance) |
+
+**Note:** When scaling from 0 workers, cooldowns are automatically bypassed for the fastest possible response.
 
 ### AutoscaleJob Settings
 
