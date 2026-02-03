@@ -729,4 +729,193 @@ RSpec.describe 'Scale-to-Zero Workflow', type: :integration do
       expect(formation_client).to have_received(:batch_update)
     end
   end
+
+  describe 'Scale-from-Zero with Lower Thresholds' do
+    # Tests the new scale-from-zero feature that uses lower thresholds
+    # when at 0 workers to enable faster cold start
+    let(:config) do
+      SolidQueueAutoscaler::Configuration.new.tap do |c|
+        c.heroku_api_key = 'test-key'
+        c.heroku_app_name = 'test-app'
+        c.min_workers = 0
+        c.max_workers = 10
+        # Normal thresholds are high
+        c.scale_up_queue_depth = 100
+        c.scale_up_latency_seconds = 300
+        # Scale-from-zero thresholds are low
+        c.scale_from_zero_queue_depth = 1
+        c.scale_from_zero_latency_seconds = 1.0
+        c.scale_up_increment = 1
+      end
+    end
+
+    subject(:engine) { SolidQueueAutoscaler::DecisionEngine.new(config: config) }
+
+    describe 'when at zero workers with 1 job that is old enough' do
+      let(:metrics) do
+        SolidQueueAutoscaler::Metrics::Result.new(
+          queue_depth: 1,  # Just 1 job - below normal threshold of 100
+          oldest_job_age_seconds: 2.0,  # 2 seconds old - above scale_from_zero_latency_seconds
+          jobs_per_minute: 0,
+          claimed_jobs: 0,
+          failed_jobs: 0,
+          blocked_jobs: 0,
+          active_workers: 0,
+          queues_breakdown: { 'default' => 1 },
+          collected_at: Time.current
+        )
+      end
+
+      it 'scales up using lower scale-from-zero thresholds' do
+        decision = engine.decide(metrics: metrics, current_workers: 0)
+
+        expect(decision.action).to eq(:scale_up)
+        expect(decision.from).to eq(0)
+        expect(decision.to).to eq(1)
+        expect(decision.reason).to include('scale_from_zero')
+      end
+    end
+
+    describe 'when at zero workers with 1 job that is too new' do
+      let(:metrics) do
+        SolidQueueAutoscaler::Metrics::Result.new(
+          queue_depth: 1,  # 1 job in queue
+          oldest_job_age_seconds: 0.5,  # Only 0.5 seconds old - below threshold
+          jobs_per_minute: 0,
+          claimed_jobs: 0,
+          failed_jobs: 0,
+          blocked_jobs: 0,
+          active_workers: 0,
+          queues_breakdown: { 'default' => 1 },
+          collected_at: Time.current
+        )
+      end
+
+      it 'does NOT scale up (job too new, give other workers a chance)' do
+        decision = engine.decide(metrics: metrics, current_workers: 0)
+
+        expect(decision.action).to eq(:no_change)
+        expect(decision.from).to eq(0)
+        expect(decision.to).to eq(0)
+      end
+    end
+
+    describe 'when at 1 worker with moderate queue depth' do
+      let(:metrics) do
+        SolidQueueAutoscaler::Metrics::Result.new(
+          queue_depth: 50,  # Between scale_down (0) and scale_up (100) thresholds
+          oldest_job_age_seconds: 60.0,  # Between scale_down (10s) and scale_up (300s)
+          jobs_per_minute: 0,
+          claimed_jobs: 10,  # Some jobs being worked on (not idle)
+          failed_jobs: 0,
+          blocked_jobs: 0,
+          active_workers: 1,
+          queues_breakdown: { 'default' => 50 },
+          collected_at: Time.current
+        )
+      end
+
+      it 'does NOT scale up (uses normal thresholds when not at 0)' do
+        decision = engine.decide(metrics: metrics, current_workers: 1)
+
+        # Should NOT scale up because we're not at 0 workers,
+        # so normal thresholds apply (queue_depth 50 < 100)
+        expect(decision.action).to eq(:no_change)
+        expect(decision.from).to eq(1)
+        expect(decision.to).to eq(1)
+      end
+    end
+
+    describe 'cooldown bypass when scaling from zero' do
+      let(:formation_client) { instance_double('PlatformAPI::Formation') }
+      let(:platform_client) { instance_double('PlatformAPI::Client', formation: formation_client) }
+      let(:lock) { instance_double(SolidQueueAutoscaler::AdvisoryLock) }
+
+      let(:scaler_config) do
+        SolidQueueAutoscaler::Configuration.new.tap do |c|
+          c.heroku_api_key = 'test-key'
+          c.heroku_app_name = 'test-app'
+          c.process_type = 'worker'
+          c.min_workers = 0
+          c.max_workers = 10
+          c.scale_up_queue_depth = 100
+          c.scale_up_latency_seconds = 300
+          c.scale_from_zero_queue_depth = 1
+          c.scale_from_zero_latency_seconds = 1.0
+          c.scale_up_increment = 1
+          c.cooldown_seconds = 300  # 5 minute cooldown
+          c.scale_up_cooldown_seconds = 300
+          c.dry_run = false
+          c.enabled = true
+          c.persist_cooldowns = false
+          c.record_events = false
+          c.logger = logger
+        end
+      end
+
+      before do
+        allow(PlatformAPI).to receive(:connect_oauth).and_return(platform_client)
+        scaler_config.adapter = SolidQueueAutoscaler::Adapters::Heroku.new(config: scaler_config)
+
+        allow(SolidQueueAutoscaler::AdvisoryLock).to receive(:new).and_return(lock)
+        allow(lock).to receive(:try_lock).and_return(true)
+        allow(lock).to receive(:release)
+
+        # Start with a recent scale-up recorded (should normally block scaling)
+        SolidQueueAutoscaler::Scaler.reset_cooldowns!
+        SolidQueueAutoscaler::Scaler.set_last_scale_up_at(scaler_config.name, Time.current - 10) # 10 seconds ago
+      end
+
+      it 'bypasses cooldown when scaling from 0 workers' do
+        error_404 = excon_error_with_status('Not Found', status: 404)
+
+        # At 0 workers
+        allow(formation_client).to receive(:info).and_raise(error_404)
+        allow(formation_client).to receive(:update).and_raise(error_404)
+        allow(formation_client).to receive(:batch_update)
+          .and_return([{ 'type' => 'worker', 'quantity' => 1 }])
+
+        # 1 job, old enough
+        metrics = SolidQueueAutoscaler::Metrics::Result.new(
+          queue_depth: 1, oldest_job_age_seconds: 2.0, jobs_per_minute: 0,
+          claimed_jobs: 0, failed_jobs: 0, blocked_jobs: 0, active_workers: 0,
+          queues_breakdown: { 'default' => 1 }, collected_at: Time.current
+        )
+        metrics_collector = instance_double(SolidQueueAutoscaler::Metrics, collect: metrics)
+        allow(SolidQueueAutoscaler::Metrics).to receive(:new).and_return(metrics_collector)
+
+        scaler = SolidQueueAutoscaler::Scaler.new(config: scaler_config)
+        result = scaler.run
+
+        # Should scale up despite cooldown being active (only 10s since last scale)
+        expect(result.success?).to be(true)
+        expect(result.scaled?).to be(true)
+        expect(result.decision.action).to eq(:scale_up)
+        expect(result.decision.from).to eq(0)
+        expect(result.decision.to).to eq(1)
+      end
+
+      it 'respects cooldown when scaling from 1+ workers' do
+        # At 1 worker (not 0)
+        allow(formation_client).to receive(:info).and_return({ 'quantity' => 1 })
+
+        # High queue depth to trigger normal scale up
+        metrics = SolidQueueAutoscaler::Metrics::Result.new(
+          queue_depth: 200, oldest_job_age_seconds: 400.0, jobs_per_minute: 0,
+          claimed_jobs: 0, failed_jobs: 0, blocked_jobs: 0, active_workers: 1,
+          queues_breakdown: { 'default' => 200 }, collected_at: Time.current
+        )
+        metrics_collector = instance_double(SolidQueueAutoscaler::Metrics, collect: metrics)
+        allow(SolidQueueAutoscaler::Metrics).to receive(:new).and_return(metrics_collector)
+
+        scaler = SolidQueueAutoscaler::Scaler.new(config: scaler_config)
+        result = scaler.run
+
+        # Should be blocked by cooldown (not at 0 workers)
+        expect(result.success?).to be(true)
+        expect(result.skipped?).to be(true)
+        expect(result.skipped_reason).to include('Cooldown active')
+      end
+    end
+  end
 end

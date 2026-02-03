@@ -41,10 +41,28 @@ module SolidQueueAutoscaler
     def should_scale_up?(metrics, current_workers)
       return false if current_workers >= @config.max_workers
 
+      # Special case: scale-from-zero uses lower thresholds for faster cold start
+      # This allows immediate scaling when at 0 workers with any work in queue
+      if current_workers.zero? && @config.min_workers.zero?
+        return should_scale_from_zero?(metrics)
+      end
+
       queue_depth_high = metrics.queue_depth >= @config.scale_up_queue_depth
       latency_high = metrics.oldest_job_age_seconds >= @config.scale_up_latency_seconds
 
       queue_depth_high || latency_high
+    end
+
+    # Scale-from-zero check: uses lower thresholds for faster cold start
+    # Requires:
+    # 1. Queue depth >= scale_from_zero_queue_depth (default: 1)
+    # 2. Oldest job age >= scale_from_zero_latency_seconds (default: 1s)
+    #    This gives other workers/queues a chance to pick up the job first
+    def should_scale_from_zero?(metrics)
+      has_work = metrics.queue_depth >= @config.scale_from_zero_queue_depth
+      job_old_enough = metrics.oldest_job_age_seconds >= @config.scale_from_zero_latency_seconds
+
+      has_work && job_old_enough
     end
 
     def should_scale_down?(metrics, current_workers)
@@ -161,12 +179,22 @@ module SolidQueueAutoscaler
     def build_scale_up_reason(metrics, current_workers = nil, target = nil)
       reasons = []
 
-      if metrics.queue_depth >= @config.scale_up_queue_depth
-        reasons << "queue_depth=#{metrics.queue_depth} >= #{@config.scale_up_queue_depth}"
-      end
+      # Check if this is a scale-from-zero scenario
+      is_scale_from_zero = current_workers&.zero? && @config.min_workers.zero? &&
+                           metrics.queue_depth >= @config.scale_from_zero_queue_depth &&
+                           metrics.oldest_job_age_seconds >= @config.scale_from_zero_latency_seconds
 
-      if metrics.oldest_job_age_seconds >= @config.scale_up_latency_seconds
-        reasons << "latency=#{metrics.oldest_job_age_seconds.round}s >= #{@config.scale_up_latency_seconds}s"
+      if is_scale_from_zero
+        reasons << "scale_from_zero: queue_depth=#{metrics.queue_depth} >= #{@config.scale_from_zero_queue_depth}"
+        reasons << "job_age=#{metrics.oldest_job_age_seconds.round(1)}s >= #{@config.scale_from_zero_latency_seconds}s"
+      else
+        if metrics.queue_depth >= @config.scale_up_queue_depth
+          reasons << "queue_depth=#{metrics.queue_depth} >= #{@config.scale_up_queue_depth}"
+        end
+
+        if metrics.oldest_job_age_seconds >= @config.scale_up_latency_seconds
+          reasons << "latency=#{metrics.oldest_job_age_seconds.round}s >= #{@config.scale_up_latency_seconds}s"
+        end
       end
 
       base_reason = reasons.join(', ')

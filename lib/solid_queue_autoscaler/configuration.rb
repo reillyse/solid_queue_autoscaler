@@ -69,6 +69,9 @@ module SolidQueueAutoscaler
     # AutoscaleJob settings
     attr_accessor :job_queue, :job_priority
 
+    # Scale-from-zero settings (for faster cold start when min_workers=0)
+    attr_accessor :scale_from_zero_queue_depth, :scale_from_zero_latency_seconds
+
     def initialize
       # Configuration name (auto-set when using named configurations)
       @name = :default
@@ -141,6 +144,11 @@ module SolidQueueAutoscaler
       # AutoscaleJob settings
       @job_queue = :autoscaler # Queue name for the autoscaler job
       @job_priority = nil # Job priority (lower = higher priority, nil = default)
+
+      # Scale-from-zero settings (for faster cold start when min_workers=0)
+      # When at 0 workers, use these lower thresholds instead of normal scale_up thresholds
+      @scale_from_zero_queue_depth = 1 # Scale up if at least 1 job in queue
+      @scale_from_zero_latency_seconds = 1.0 # Job must be at least 1 second old (gives other workers a chance)
     end
 
     # Returns the lock key, auto-generating based on name if not explicitly set
@@ -195,6 +203,10 @@ module SolidQueueAutoscaler
       unless VALID_SCALING_STRATEGIES.include?(scaling_strategy)
         errors << "scaling_strategy must be one of: #{VALID_SCALING_STRATEGIES.join(', ')}"
       end
+
+      # Validate scale-from-zero settings
+      errors << 'scale_from_zero_queue_depth must be > 0' if scale_from_zero_queue_depth <= 0
+      errors << 'scale_from_zero_latency_seconds must be >= 0' if scale_from_zero_latency_seconds.negative?
 
       raise ConfigurationError, errors.join(', ') if errors.any?
 

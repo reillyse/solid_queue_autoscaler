@@ -185,6 +185,12 @@ module SolidQueueAutoscaler
     end
 
     def cooldown_active?(decision)
+      # Bypass cooldowns when scaling from zero - we want fast cold start
+      # This is safe because there are no workers to destabilize
+      if decision.scale_up? && decision.from.zero? && @config.min_workers.zero?
+        return false
+      end
+
       if @config.persist_cooldowns && cooldown_tracker.table_exists?
         # Use database-persisted cooldowns (survives process restarts)
         if decision.scale_up?

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.20] - 2025-02-02
+
+### Added
+- **Scale-from-zero optimization** - New configuration options for faster cold starts when `min_workers = 0`:
+  - `scale_from_zero_queue_depth` (default: 1) - Scale up immediately when at 0 workers if queue has at least this many jobs
+  - `scale_from_zero_latency_seconds` (default: 1.0) - Job must be at least this old before scaling up (gives other workers a chance to pick it up first)
+  - When at 0 workers, uses these lower thresholds instead of the normal `scale_up_queue_depth` and `scale_up_latency_seconds`
+  - Cooldowns are bypassed when scaling from 0 workers for fast cold start
+  - Comprehensive tests in `scale_to_zero_workflow_spec.rb`
+
 ## [1.0.19] - 2025-02-02
 
 ### Added
