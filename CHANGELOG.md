@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.19] - 2025-02-02
+
+### Added
+- **AutoscaleJob string/symbol validation** - Detects when `recurring.yml` passes a quoted string like `":all"` instead of the symbol `:all`
+  - Raises a helpful `ConfigurationError` with exact before/after YAML examples
+  - Plain strings like `"default"` are leniently converted to symbols
+  - New `normalize_worker_name` helper method with comprehensive tests
+
+### Improved
+- **Better error message for missing Procfile process types** - When `batch_update` returns 404 (process type doesn't exist), the error now explains:
+  - The process type doesn't exist in the Procfile
+  - How to verify with `heroku ps -a <app_name>`
+  - That the configured `process_type` must exactly match a Procfile entry
+
 ## [1.0.18] - 2025-01-31
 
 ### Fixed

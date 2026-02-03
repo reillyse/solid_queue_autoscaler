@@ -21,6 +21,8 @@ module SolidQueueAutoscaler
     # @param worker_name [Symbol] The worker type to scale (:default, :critical_worker, etc.)
     #                             Pass :all to scale all registered workers
     def perform(worker_name = :default)
+      worker_name = normalize_worker_name(worker_name)
+
       if worker_name == :all
         perform_scale_all
       else
@@ -78,6 +80,34 @@ module SolidQueueAutoscaler
     def log_failure(result, worker_name)
       worker_label = worker_name == :default ? '' : "[#{worker_name}] "
       Rails.logger.error("[AutoscaleJob] #{worker_label}Failed: #{result.error&.message}")
+    end
+
+    # Normalize and validate worker_name argument.
+    # Detects common YAML misconfiguration where symbols are quoted as strings.
+    #
+    # @param worker_name [Symbol, String] The worker name to normalize
+    # @return [Symbol] The normalized worker name as a symbol
+    # @raise [ConfigurationError] If a string that looks like a symbol is passed
+    def normalize_worker_name(worker_name)
+      return worker_name if worker_name.is_a?(Symbol)
+
+      # Detect strings that look like symbols (e.g., ":all", ":default")
+      # This is a common YAML misconfiguration
+      if worker_name.is_a?(String) && worker_name.start_with?(':')
+        symbol_name = worker_name[1..] # Remove the leading colon
+        raise ConfigurationError,
+              "Invalid worker_name argument: received string #{worker_name.inspect} instead of symbol :#{symbol_name}. " \
+              "In your recurring.yml, change:\n" \
+              "  args:\n" \
+              "    - \"#{worker_name}\"\n" \
+              "to:\n" \
+              "  args:\n" \
+              "    - :#{symbol_name}\n" \
+              '(Remove the quotes around the symbol)'
+      end
+
+      # Convert plain strings to symbols (lenient mode)
+      worker_name.to_sym
     end
   end
 end

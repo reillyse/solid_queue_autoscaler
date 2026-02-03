@@ -115,9 +115,24 @@ module SolidQueueAutoscaler
         end
         quantity
       rescue Excon::Error => e
+        status = e.respond_to?(:response) ? e.response&.status : nil
+        
+        # 404 from batch_update means the process type doesn't exist in the Procfile
+        # This is different from 404 on formation.update (which means scaled to 0)
+        if status == 404
+          raise HerokuAPIError.new(
+            "Process type '#{process_type}' does not exist. " \
+            "Verify that '#{process_type}:' is defined in your Procfile. " \
+            "Available process types can be viewed with 'heroku ps -a #{app_name}' or in your Procfile. " \
+            "The configured process_type must exactly match a Procfile entry.",
+            status_code: status,
+            response_body: e.respond_to?(:response) ? e.response&.body : nil
+          )
+        end
+
         raise HerokuAPIError.new(
           "Failed to create formation #{process_type} with quantity #{quantity}: #{e.message}",
-          status_code: e.respond_to?(:response) ? e.response&.status : nil,
+          status_code: status,
           response_body: e.respond_to?(:response) ? e.response&.body : nil
         )
       end

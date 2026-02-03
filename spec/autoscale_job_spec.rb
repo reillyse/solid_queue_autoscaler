@@ -117,6 +117,47 @@ RSpec.describe SolidQueueAutoscaler::AutoscaleJob do
     end
   end
 
+  describe '#normalize_worker_name' do
+    let(:job) { described_class.new }
+
+    context 'with a symbol argument' do
+      it 'returns the symbol unchanged' do
+        expect(job.send(:normalize_worker_name, :all)).to eq(:all)
+        expect(job.send(:normalize_worker_name, :default)).to eq(:default)
+        expect(job.send(:normalize_worker_name, :priority_worker)).to eq(:priority_worker)
+      end
+    end
+
+    context 'with a string that looks like a symbol (YAML misconfiguration)' do
+      it 'raises ConfigurationError for ":all"' do
+        expect { job.send(:normalize_worker_name, ':all') }
+          .to raise_error(SolidQueueAutoscaler::ConfigurationError, /received string ":all" instead of symbol :all/)
+      end
+
+      it 'raises ConfigurationError for ":default"' do
+        expect { job.send(:normalize_worker_name, ':default') }
+          .to raise_error(SolidQueueAutoscaler::ConfigurationError, /received string ":default" instead of symbol :default/)
+      end
+
+      it 'includes YAML fix instructions in the error message' do
+        expect { job.send(:normalize_worker_name, ':all') }
+          .to raise_error(SolidQueueAutoscaler::ConfigurationError, /In your recurring.yml, change:/)
+      end
+
+      it 'suggests removing quotes from the symbol' do
+        expect { job.send(:normalize_worker_name, ':all') }
+          .to raise_error(SolidQueueAutoscaler::ConfigurationError, /Remove the quotes around the symbol/)
+      end
+    end
+
+    context 'with a plain string (lenient mode)' do
+      it 'converts to a symbol' do
+        expect(job.send(:normalize_worker_name, 'default')).to eq(:default)
+        expect(job.send(:normalize_worker_name, 'priority_worker')).to eq(:priority_worker)
+      end
+    end
+  end
+
   describe '#perform' do
     let(:mock_result) do
       SolidQueueAutoscaler::Scaler::ScaleResult.new(

@@ -277,7 +277,7 @@ RSpec.describe SolidQueueAutoscaler::Adapters::Heroku do
       end
     end
 
-    context 'when formation does not exist and batch_update also fails' do
+    context 'when formation does not exist and batch_update also fails with 422' do
       before do
         config.dry_run = false
         response_404 = double('response', status: 404,
@@ -296,6 +296,43 @@ RSpec.describe SolidQueueAutoscaler::Adapters::Heroku do
       it 'raises HerokuAPIError with details about creating the formation' do
         expect { adapter.scale(3) }
           .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Failed to create formation worker with quantity 3/)
+      end
+    end
+
+    context 'when formation does not exist and batch_update also returns 404 (process type not in Procfile)' do
+      before do
+        config.dry_run = false
+        response_404 = double('response', status: 404,
+                                         body: '{"id":"not_found","message":"Couldn\'t find that formation."}')
+        error_404 = Excon::Error.new('Not Found')
+        error_404.define_singleton_method(:response) { response_404 }
+        allow(formation_client).to receive(:update).and_raise(error_404)
+
+        batch_response_404 = double('response', status: 404,
+                                               body: '{"id":"not_found","message":"Couldn\'t find that process type."}')
+        batch_error_404 = Excon::Error.new('Not Found')
+        batch_error_404.define_singleton_method(:response) { batch_response_404 }
+        allow(formation_client).to receive(:batch_update).and_raise(batch_error_404)
+      end
+
+      it 'raises HerokuAPIError with helpful message about Procfile' do
+        expect { adapter.scale(3) }
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Process type 'worker' does not exist/)
+      end
+
+      it 'suggests checking the Procfile' do
+        expect { adapter.scale(3) }
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /Verify that 'worker:' is defined in your Procfile/)
+      end
+
+      it 'mentions heroku ps command' do
+        expect { adapter.scale(3) }
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /heroku ps -a my-test-app/)
+      end
+
+      it 'explains that process_type must match exactly' do
+        expect { adapter.scale(3) }
+          .to raise_error(SolidQueueAutoscaler::HerokuAPIError, /must exactly match a Procfile entry/)
       end
     end
 
